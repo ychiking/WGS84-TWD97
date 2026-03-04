@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WGS84 ↔ TWD97 專業轉換器</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
+    <style>
+        body { font-family: "Microsoft JhengHei", sans-serif; display: flex; justify-content: center; background-color: #f0f2f5; padding: 20px; }
+        .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 500px; }
+        h2 { color: #1a73e8; text-align: center; margin-top: 0; }
+        .section { margin-bottom: 25px; padding: 15px; border: 1px solid #e0e0e0; border-radius: 8px; }
+        h3 { margin-top: 0; font-size: 16px; color: #555; border-left: 4px solid #1a73e8; padding-left: 10px; }
+        label { display: block; margin: 10px 0 5px; font-size: 14px; color: #666; }
+        input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 16px; margin-bottom: 10px; }
+        button { width: 100%; padding: 12px; background-color: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; transition: 0.3s; }
+        button:hover { background-color: #1557b0; }
+        .result-box { margin-top: 15px; padding: 12px; background-color: #e8f0fe; border-radius: 4px; border: 1px dashed #1a73e8; cursor: pointer; position: relative; }
+        .result-box:active { background-color: #d2e3fc; }
+        .hint { font-size: 12px; color: #888; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>座標轉換工具</h2>
+
+    <div class="section">
+        <h3>WGS84 ➜ TWD97</h3>
+        <label>輸入經緯度 (支援度分秒或十進位)</label>
+        <input type="text" id="wgs_input" placeholder="例如: 24.868441, 121.458664">
+        <button onclick="toTWD97()">轉換為 TWD97</button>
+        <div id="res_twd97" class="result-box" onclick="copyText('res_twd97')">結果顯示在此 (點擊可複製)</div>
+        <p class="hint">支援格式：24.868441, 121.458664 或 24°52'06.4"N 121°27'31.2"E</p>
+    </div>
+
+    <div class="section">
+        <h3>TWD97 ➜ WGS84</h3>
+        <label>輸入 TWD97 X, Y</label>
+        <input type="text" id="twd_input" placeholder="例如: 296325, 2751276">
+        <button onclick="toWGS84()">轉換為 WGS84</button>
+        <div id="res_wgs84" class="result-box" onclick="copyText('res_wgs84')">結果顯示在此 (點擊可複製)</div>
+    </div>
+</div>
+
+<script>
+    const TWD97_DEF = "+proj=tmerc +lat_0=0 +lon_0=121 +k=0.9999 +x_0=250000 +y_0=0 +ellps=GRS80 +units=m +no_defs";
+    const WGS84_DEF = "EPSG:4326";
+
+    // 度分秒轉十進位的解析器
+    function parseDMS(input) {
+        const dmsRegex = /(\d+)°\s*(\d+)'\s*([\d.]+)"?\s*([NSEW])?/gi;
+        let parts = [];
+        let match;
+        
+        while ((match = dmsRegex.exec(input)) !== null) {
+            let deg = parseFloat(match[1]);
+            let min = parseFloat(match[2]) / 60;
+            let sec = parseFloat(match[3]) / 3600;
+            let direction = match[4] ? match[4].toUpperCase() : '';
+            
+            let dd = deg + min + sec;
+            if (direction === 'S' || direction === 'W') dd = -dd;
+            parts.push(dd);
+        }
+
+        if (parts.length === 2) {
+            // 判斷順序：通常輸入是 緯度N, 經度E
+            return { lat: parts[0], lon: parts[1] };
+        } else {
+            // 嘗試解析簡單的逗號分隔格式
+            const simple = input.split(/[ ,]+/);
+            if (simple.length >= 2) {
+                return { lat: parseFloat(simple[0]), lon: parseFloat(simple[1]) };
+            }
+        }
+        throw "格式無法辨識";
+    }
+
+    function toTWD97() {
+        try {
+            const inputStr = document.getElementById('wgs_input').value;
+            const coords = parseDMS(inputStr);
+            
+            const result = proj4(WGS84_DEF, TWD97_DEF, [coords.lon, coords.lat]);
+            const output = `${Math.round(result[0])}, ${Math.round(result[1])}`;
+            document.getElementById('res_twd97').innerHTML = `TWD97 X/Y: <b>${output}</b>`;
+        } catch (e) {
+            alert("請輸入正確格式！\n例如: 25°04'07.0\"N 121°26'59.8\"E");
+        }
+    }
+
+    function toWGS84() {
+        try {
+            const val = document.getElementById('twd_input').value;
+            const parts = val.split(/[ ,]+/);
+            const result = proj4(TWD97_DEF, WGS84_DEF, [parseFloat(parts[0]), parseFloat(parts[1])]);
+            const output = `${result[1].toFixed(6)}, ${result[0].toFixed(6)}`;
+            document.getElementById('res_wgs84').innerHTML = `WGS84: <b>${output}</b>`;
+        } catch (e) {
+            alert("請輸入 TWD97 X, Y 座標");
+        }
+    }
+
+    function copyText(id) {
+        const text = document.getElementById(id).innerText;
+        if (text.includes(':')) {
+            const content = text.split(': ')[1];
+            navigator.clipboard.writeText(content);
+            alert("已複製: " + content);
+        }
+    }
+</script>
+
+</body>
+</html>
