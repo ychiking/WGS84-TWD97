@@ -14,7 +14,7 @@ const topo3 = L.tileLayer("https://wmts.nlsc.gov.tw/wmts/TM25K_2001/default/Goog
     maxNativeZoom: 17,
     attribution: "內政部-經建三版",
     // 雖然伺服器端可能擋 CORS，但代碼端建議加上 anonymous 嘗試發起跨域請求
-    crossOrigin: 'anonymous' 
+    // crossOrigin: 'anonymous' 
 });
 
 // --- 純等高線層 ---
