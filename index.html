@@ -1,116 +1,198 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WGS84 ↔ TWD97 專業轉換器</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
-    <style>
-        body { font-family: "Microsoft JhengHei", sans-serif; display: flex; justify-content: center; background-color: #f0f2f5; padding: 20px; }
-        .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 500px; }
-        h2 { color: #1a73e8; text-align: center; margin-top: 0; }
-        .section { margin-bottom: 25px; padding: 15px; border: 1px solid #e0e0e0; border-radius: 8px; }
-        h3 { margin-top: 0; font-size: 16px; color: #555; border-left: 4px solid #1a73e8; padding-left: 10px; }
-        label { display: block; margin: 10px 0 5px; font-size: 14px; color: #666; }
-        input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 16px; margin-bottom: 10px; }
-        button { width: 100%; padding: 12px; background-color: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; transition: 0.3s; }
-        button:hover { background-color: #1557b0; }
-        .result-box { margin-top: 15px; padding: 12px; background-color: #e8f0fe; border-radius: 4px; border: 1px dashed #1a73e8; cursor: pointer; position: relative; }
-        .result-box:active { background-color: #d2e3fc; }
-        .hint { font-size: 12px; color: #888; margin-top: 5px; }
-    </style>
+  <meta charset="UTF-8" />
+  <title>YCHiking - GPX 路線檢視工具</title>
+  
+  <link rel="icon" type="image/png" href="https://ychiking.github.io/gpx-online-viewer/webicon.png">
+  <link rel="apple-touch-icon" href="https://ychiking.github.io/gpx-online-viewer/webicon.png">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
+
+  <style>
+    body { margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont; }
+    #header { padding: 10px 14px; background: #f6f6f6; border-bottom: 1px solid #ddd; }
+    #map { height: 600px; cursor: crosshair; }
+    #chartContainer { 
+    height: 300px; 
+    padding: 10px 16px; 
+    border-bottom: 1px solid #ddd; 
+    display: none; /* 加入這一行 */
+}
+    #routeInfo { margin-top: 5px; padding: 12px 16px; background: #fafafa; border-top: 1px solid #ddd; font-size: 15px; line-height: 1.6; }
+    .upload-row { display: flex; align-items: center; gap: 8px; }
+    .subtitle { margin-top: 8px; font-size: 14px; color: #555; line-height: 1.4; }
+    .modal-overlay {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.6); z-index: 3000; justify-content: center; align-items: center;
+    }
+    .modal-content {
+      background: white; padding: 25px; border-radius: 12px; width: 90%; max-width: 450px; position: relative;
+    }
+    .coord-section { margin-bottom: 15px; padding: 12px; border: 1px solid #eee; border-radius: 8px; }
+    .coord-section h3 { margin: 0 0 10px 0; font-size: 15px; color: #1a73e8; }
+    label { display: block; margin: 10px 0 5px; font-size: 14px; color: #666; }
+    .result-box { 
+      margin-top: 10px; padding: 10px; background: #f8f9fa; border: 1px dashed #ccc; 
+      border-radius: 4px; cursor: pointer; font-size: 14px; text-align: center; min-height: 20px;
+    }
+    .error-text { color: #d93025 !important; background-color: #fce8e6 !important; border-color: #d93025 !important; }
+    .copy-success { background-color: #e6f4ea !important; border-color: #34a853 !important; color: #1e8e3e !important; }
+    
+    .coord-input { width: 100%; padding: 8px; box-sizing: border-box; margin-bottom: 8px; border: 1px solid #ccc; border-radius: 4px; }
+    .btn-group { display: flex; gap: 5px; }
+    .btn-primary { background: #1a73e8; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; flex: 1; }
+    .btn-geo { background: #34a853; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; flex: 1; }
+
+    .wpt-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+    .wpt-table th, .wpt-table td { border-bottom: 1px solid #eee; padding: 8px 2px; text-align: left; }
+    .wpt-link { color: #007bff; text-decoration: underline; cursor: pointer; font-weight: bold; }
+    .ab-container { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
+    .ab-box { flex: 1; min-width: 250px; border: 1px solid #ccc; border-radius: 8px; padding: 10px; background: white; border-left: 5px solid #ddd; }
+    .active-a { border-left-color: #007bff; }
+    .active-b { border-left-color: #e83e8c; }
+    .btn-clear-all {
+		    padding: 4px 15px;
+		    background-color: #6c757d;
+		    color: white;
+		    border: none;
+		    border-radius: 20px; /* 圓角弧度 */
+		    font-size: 13px;
+		    cursor: pointer;
+		    transition: background 0.2s;
+		    line-height: 1.5;
+		  }
+		  .btn-clear-all:hover {
+		    background-color: #5a6268;
+		  }
+		    		/* N 字標記 (放在 0 刻度上方) */
+		.map-compass::after {
+		    content: 'N';
+		    position: absolute;
+		    top: -20px;
+		    font-weight: bold;
+		    color: #d32f2f;
+		    font-size: 14px;
+		    text-shadow: 1px 1px 0 white;
+		}
+		/* 專門給 iPhone 用的偽全螢幕樣式 */
+		.iphone-fullscreen {
+    		position: fixed !important;
+    		top: 0 !important;
+    		left: 0 !important;
+    		width: 100vw !important;
+    		height: 100vh !important;
+    		z-index: 9999 !important;
+		}
+		
+    .custom-file-upload { display: inline-block; padding: 8px 15px; cursor: pointer; background: #007bff; color: white; border-radius: 20px; font-size: 14px; font-weight: bold; }
+    .map-compass { position: absolute; bottom: 10px; left: 5px; z-index: 1000; background: rgba(255, 255, 255, 0.9); border-radius: 50%; width: 65px; height: 65px; display: flex; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: all 0.3s; border: 1px solid #ccc; }
+    .map-compass.show { opacity: 1; visibility: visible; }
+    .shortcut-btn { font-size: 12px; background: #f0f0f0; color: #555; padding: 5px 12px; border-radius: 15px; text-decoration: none; border: 1px solid #ddd; font-weight: bold; }
+
+    @media (max-width: 768px) { #map { height: 45vh; } #chartContainer { height: 220px; } }
+  </style>
 </head>
 <body>
-
-<div class="card">
-    <h2>座標轉換工具</h2>
-
-    <div class="section">
-        <h3>WGS84 ➜ TWD97</h3>
-        <label>輸入經緯度 (支援度分秒或十進位)</label>
-        <input type="text" id="wgs_input" placeholder="例如: 24.868441, 121.458664">
-        <button onclick="toTWD97()">轉換為 TWD97</button>
-        <div id="res_twd97" class="result-box" onclick="copyText('res_twd97')">結果顯示在此 (點擊可複製)</div>
-        <p class="hint">支援格式：24.868441, 121.458664 或 24°52'06.4"N 121°27'31.2"E</p>
+<div id="header">
+  <div class="upload-row">
+    <input type="file" id="gpxInput" accept=".gpx" style="display: none;" />
+    <label for="gpxInput" class="custom-file-upload">匯入 GPX</label>
+    <span id="fileNameDisplay" style="font-weight:600; margin-left:5px;">尚未選擇檔案</span>
+  </div>
+  <div class="subtitle">
+    <strong>YCHiking-GPX 路線檢視工具 v260331</strong>
+    <div id="navShortcuts" style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;"></div>
+    <div id="routeSelectContainer" style="display:none; margin-top: 10px;">
+      <select id="routeSelect" style="padding: 6px 15px; border-radius: 20px; border: 1px solid #ccc;"></select>
     </div>
+  </div>
+</div>
 
-    <div class="section">
-        <h3>TWD97 ➜ WGS84</h3>
-        <label>輸入 TWD97 X, Y</label>
-        <input type="text" id="twd_input" placeholder="例如: 296325, 2751276">
-        <button onclick="toWGS84()">轉換為 WGS84</button>
-        <div id="res_wgs84" class="result-box" onclick="copyText('res_wgs84')">結果顯示在此 (點擊可複製)</div>
+<div id="map">
+ 	<div id="mapCompass" class="map-compass">
+    <svg width="100%" height="100%" viewBox="-10 -10 160 160">
+        <circle cx="70" cy="70" r="65" fill="none" stroke="#ccc" stroke-width="1" />
+        <circle cx="70" cy="70" r="55" fill="white" fill-opacity="0.8" />
+        
+        <text x="70" y="10" text-anchor="middle" font-size="20" font-weight="bold" fill="#d32f2f">北</text>
+        <text x="70" y="32" text-anchor="middle" font-size="20" fill="#d32f2f">0</text>
+        
+        <text x="122" y="70" text-anchor="middle" font-size="20" font-weight="bold" fill="#333">東</text>
+        <text x="122" y="90" text-anchor="middle" font-size="16" fill="#333">90</text>
+        
+        <text x="70" y="145" text-anchor="middle" font-size="20" font-weight="bold" fill="#333">南</text>
+        <text x="70" y="122" text-anchor="middle" font-size="16" fill="#333">180</text>
+        
+        <text x="18" y="70" text-anchor="middle" font-size="20" font-weight="bold" fill="#333">西</text>
+        <text x="18" y="90" text-anchor="middle" font-size="16" fill="#333">270</text>
+
+        <path d="M70,35 L62,70 L70,70 Z" fill="#d32f2f" />
+        <path d="M70,35 L78,70 L70,70 Z" fill="#b71c1c" /> <path d="M70,105 L62,70 L70,70 Z" fill="#777" />
+        <path d="M70,105 L78,70 L70,70 Z" fill="#555" /> <circle cx="70" cy="70" r="4" fill="#333" stroke="white" stroke-width="1" />
+</div>
+</div>
+
+<div id="coordModal" class="modal-overlay">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <span style="position: absolute; top: 10px; right: 15px; font-size: 28px; cursor: pointer; color: #999;" 
+              onclick="document.getElementById('coordModal').style.display='none'; clearCoordInputs();">&times;</span>
+        
+        <h2 style="color: #1a73e8; text-align: center; margin-top: 0; margin-bottom: 20px;">座標定位與轉換</h2>
+
+        <div class="coord-section">
+            <h3>WGS84 ➜ TWD97</h3>
+            <label>輸入經緯度 (緯度, 經度)</label>
+            <input type="text" id="wgs_input" class="coord-input" placeholder="(例如: 24.86, 121.45)">
+            <div class="btn-group">
+                <button class="btn-geo" onclick="getLocation()">📍 讀取定位</button>
+                <button class="btn-primary" onclick="toTWD97()">轉換</button>
+            </div>
+            <div id="res_twd97" class="result-box" onclick="copyText('res_twd97')">結果顯示在此 (點擊可複製)</div>
+        </div>
+
+        <div class="coord-section">
+            <h3>TWD97 ➜ WGS84</h3>
+            <label>輸入TWD97 (X, Y)</label>
+            <input type="text" id="twd_input" class="coord-input" placeholder="(例如: 296325, 2751276)">
+            <button class="btn-primary" style="width: 100%;" onclick="toWGS84()">轉換</button>
+            <div id="res_wgs84" class="result-box" onclick="copyText('res_wgs84')">結果顯示在此 (點擊可複製)</div>
+        </div>
     </div>
 </div>
 
-<script>
-    const TWD97_DEF = "+proj=tmerc +lat_0=0 +lon_0=121 +k=0.9999 +x_0=250000 +y_0=0 +ellps=GRS80 +units=m +no_defs";
-    const WGS84_DEF = "EPSG:4326";
+<div id="chartContainer"><canvas id="elevationChart"></canvas></div>
+<div id="routeInfo">
+  <div id="routeSummary">尚未讀取資料</div>
+  
+  <hr style="border: 0; border-top: 1px solid #eee; margin: 15px 0;">
 
-    // 度分秒轉十進位的解析器
-    function parseDMS(input) {
-        const dmsRegex = /(\d+)°\s*(\d+)'\s*([\d.]+)"?\s*([NSEW])?/gi;
-        let parts = [];
-        let match;
-        
-        while ((match = dmsRegex.exec(input)) !== null) {
-            let deg = parseFloat(match[1]);
-            let min = parseFloat(match[2]) / 60;
-            let sec = parseFloat(match[3]) / 3600;
-            let direction = match[4] ? match[4].toUpperCase() : '';
-            
-            let dd = deg + min + sec;
-            if (direction === 'S' || direction === 'W') dd = -dd;
-            parts.push(dd);
-        }
+  <div class="ab-header-row">
+    <span class="ab-title">區間標記設定</span>
+    <button class="btn-clear-all" onclick="clearABSettings()">清除 A B 點</button>
+  </div>
+  
+  <div class="ab-container">
+    <div id="boxA" class="ab-box active-a" style="flex:1; min-width:250px; border:1px solid #ccc; border-radius:8px; padding:10px; background:white; border-left:5px solid #007bff;">
+      <b>A 點</b>
+      <div id="infoA" style="font-size:13px; color:#666;">尚未設定</div>
+    </div>
+    <div id="boxB" class="ab-box active-b" style="flex:1; min-width:250px; border:1px solid #ccc; border-radius:8px; padding:10px; background:white; border-left:5px solid #e83e8c;">
+      <b>B 點</b> (請確認B點時間需晚於A點時間)
+      <div id="infoB" style="font-size:13px; color:#666;">尚未設定</div>
+    </div>
+  </div>
 
-        if (parts.length === 2) {
-            // 判斷順序：通常輸入是 緯度N, 經度E
-            return { lat: parts[0], lon: parts[1] };
-        } else {
-            // 嘗試解析簡單的逗號分隔格式
-            const simple = input.split(/[ ,]+/);
-            if (simple.length >= 2) {
-                return { lat: parseFloat(simple[0]), lon: parseFloat(simple[1]) };
-            }
-        }
-        throw "格式無法辨識";
-    }
+  <div id="boxRes" class="ab-box result" style="display:none; margin-top:10px; border:1px solid #28a745; border-radius:8px; padding:10px; background:#f8fff9;">
+    <b style="color:#28a745;">區間分析 (A ↔ B)</b>
+    <div id="infoRes" style="font-size:13px;"></div>
+  </div>
 
-    function toTWD97() {
-        try {
-            const inputStr = document.getElementById('wgs_input').value;
-            const coords = parseDMS(inputStr);
-            
-            const result = proj4(WGS84_DEF, TWD97_DEF, [coords.lon, coords.lat]);
-            const output = `${Math.round(result[0])}, ${Math.round(result[1])}`;
-            document.getElementById('res_twd97').innerHTML = `TWD97 X/Y: <b>${output}</b>`;
-        } catch (e) {
-            alert("請輸入正確格式！\n例如: 25°04'07.0\"N 121°26'59.8\"E");
-        }
-    }
-
-    function toWGS84() {
-        try {
-            const val = document.getElementById('twd_input').value;
-            const parts = val.split(/[ ,]+/);
-            const result = proj4(TWD97_DEF, WGS84_DEF, [parseFloat(parts[0]), parseFloat(parts[1])]);
-            const output = `${result[1].toFixed(6)}, ${result[0].toFixed(6)}`;
-            document.getElementById('res_wgs84').innerHTML = `WGS84: <b>${output}</b>`;
-        } catch (e) {
-            alert("請輸入 TWD97 X, Y 座標");
-        }
-    }
-
-    function copyText(id) {
-        const text = document.getElementById(id).innerText;
-        if (text.includes(':')) {
-            const content = text.split(': ')[1];
-            navigator.clipboard.writeText(content);
-            alert("已複製: " + content);
-        }
-    }
-</script>
-
+  <div id="wptList"></div>
+</div>
+<script src="app.js"></script>
 </body>
 </html>
