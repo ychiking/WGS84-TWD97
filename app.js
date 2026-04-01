@@ -9,12 +9,10 @@ const emap = L.tileLayer("https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsC
     opacity: 1.0,
 });
 
-const topo3 = L.tileLayer("https://wmts.nlsc.gov.tw/wmts/TM25K_2001/default/GoogleMapsCompatible/{z}/{y}/{x}", {
+const topo3 = L.tileLayer("https://gis.sinica.edu.tw/tilesystem/content/topo25k_2001/{z}/{x}/{y}.jpg", {
     maxZoom: 18,
-    maxNativeZoom: 17,
-    attribution: "內政部-經建三版",
-    // 雖然伺服器端可能擋 CORS，但代碼端建議加上 anonymous 嘗試發起跨域請求
-    // crossOrigin: 'anonymous' 
+    maxNativeZoom: 16, // 中研院源建議最高到 16，17 以上會變模糊
+    attribution: "中研院 ASDC | 經建三版"
 });
 
 // --- 純等高線層 ---
