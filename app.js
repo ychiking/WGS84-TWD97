@@ -9,30 +9,13 @@ const emap = L.tileLayer("https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsC
     opacity: 1.0,
 });
 
-const topo3 = L.tileLayer("https://gis.sinica.edu.tw/tilesystem/content/topo25k_2001/{z}/{x}/{y}.jpg", {
+// 2. 魯地圖清爽版 (Happyman)
+const rudyMap = L.tileLayer("https://tile.happyman.idv.tw/mp/service?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=rudy&STYLE=default&TILEMATRIXSET=GoogleMapsCompatible&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png", {
     maxZoom: 18,
-    maxNativeZoom: 16, // 中研院源建議最高到 16，17 以上會變模糊
-    attribution: "中研院 ASDC | 經建三版"
-});
-
-// --- 純等高線層 ---
-const contour = L.tileLayer("https://wmts.nlsc.gov.tw/wmts/CONTOUR/default/GoogleMapsCompatible/{z}/{y}/{x}", {
-    maxZoom: 18,
-    opacity: 0.8,
-    attribution: "內政部-等高線"
-});
-
-// --- OpenTopo 地形陰影底層 ---
-const otm_base = L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
-    maxZoom: 17,
-    attribution: 'OpenTopoMap'
-});
-
-// --- 組合：OpenTopo 陰影 + 經建三版 ---
-const otm_topo3 = L.layerGroup([otm_base, topo3]);
-
-// --- 組合：經建三版 + 等高線 ---
-const topo3_contour = L.layerGroup([topo3, contour]);
+    attribution: "魯地圖清爽版 (Happyman) | © OSM Contributors",
+    crossOrign: true,
+    cache: false
+}).addTo(map);
 
 // --- 格線圖層全域變數 ---
 let gridLayers = {
@@ -47,8 +30,8 @@ const baseMaps = {
     "標準地圖 (OSM)": osm, 
     "等高線地形圖 (OpenTopo)": otm,
     "內政部臺灣通用電子地圖": emap,
-	"經建三版": topo3,
-    "OpenTopo + 經建三版": otm_topo3,
+    "魯地圖": rudyMap
+    
 };
 
 const overlayMaps = {
@@ -382,14 +365,22 @@ function parseGPX(text) {
   allTracks = [];
   routeSelect.innerHTML = "";
   
-  // 1. 先取得所有原始航點 (wpt)
+  // 1. 取得所有原始航點 (wpt)
   const wpts = xml.getElementsByTagName("wpt");
   let allWpts = [];
   for (let w of wpts) {
     const lat = parseFloat(w.getAttribute("lat")), lon = parseFloat(w.getAttribute("lon"));
     const name = w.getElementsByTagName("name")[0]?.textContent || "未命名航點";
     const time = w.getElementsByTagName("time")[0]?.textContent;
-    allWpts.push({ lat, lon, name, localTime: time ? formatDate(new Date(new Date(time).getTime() + 8*3600000)) : "無時間資訊" });
+    const ele = w.getElementsByTagName("ele")[0]?.textContent || "0";
+    
+    allWpts.push({ 
+      lat, 
+      lon, 
+      name, 
+      ele: Math.round(ele),
+      localTime: time ? formatDate(new Date(new Date(time).getTime() + 8*3600000)) : "無時間資訊" 
+    });
   }
 
   // 2. 處理每一條路線 (trk)
@@ -398,11 +389,10 @@ function parseGPX(text) {
     const pts = trks[i].getElementsByTagName("trkpt");
     const points = extractPoints(pts);
     
-    // 「距離該路線 500 公尺內」的航點
     const routeWaypoints = allWpts.filter(w => {
       return points.some(p => {
-        const d = Math.sqrt((w.lat - p.lat)**2 + (w.lon - p.lon)**2) * 111000; // 簡單距離計算
-        return d < 500; // 單位：公尺，可以根據需要調整範圍
+        const d = Math.sqrt((w.lat - p.lat)**2 + (w.lon - p.lon)**2) * 111000;
+        return d < 500;
       });
     });
 
@@ -410,10 +400,55 @@ function parseGPX(text) {
       allTracks.push({ 
         name: trks[i].getElementsByTagName("name")[0]?.textContent || `路線 ${i + 1}`, 
         points, 
-        waypoints: routeWaypoints // 每個路線只帶入過濾後的航點
+        waypoints: routeWaypoints 
       });
     }
   }
+
+  // --- 【核心修正：無航跡時強行顯示列表】 ---
+  const listContainer = document.getElementById("waypointList"); // 匹配 index.html 大寫 ID
+
+  if (allTracks.length === 0 && allWpts.length > 0) {
+    allTracks.push({
+      name: "僅含航點資料",
+      points: [],
+      waypoints: allWpts
+    });
+    
+    // A. 清除並在地圖顯示 Marker
+    if (window.currentWaypoints) window.currentWaypoints.forEach(m => map.removeLayer(m));
+    window.currentWaypoints = [];
+    allWpts.forEach(w => {
+      const marker = L.marker([w.lat, w.lon]).addTo(map).bindPopup(`<b>${w.name}</b><br>海拔: ${w.ele}m`);
+      window.currentWaypoints.push(marker);
+    });
+
+    // B. 強行渲染列表 (不走 loadRoute)
+    if (listContainer) {
+      listContainer.innerHTML = "";
+      allWpts.forEach(w => {
+        const item = document.createElement("div");
+        item.className = "waypoint-item"; // 沿用您的 CSS
+        item.style.display = "block"; // 確保顯示
+        item.innerHTML = `
+          <div style="font-weight:bold;">${w.name}</div>
+          <div style="font-size:12px; color:#666;">海拔: ${w.ele}m</div>
+        `;
+        item.onclick = () => {
+          map.setView([w.lat, w.lon], 16);
+          const targetMarker = window.currentWaypoints.find(m => m.getLatLng().lat === w.lat);
+          if (targetMarker) targetMarker.openPopup();
+        };
+        listContainer.appendChild(item);
+      });
+    }
+
+    // C. 縮放地圖與更新摘要
+    map.fitBounds(allWpts.map(w => [w.lat, w.lon]));
+    document.getElementById("routeSummary").textContent = `純航點檔案：共 ${allWpts.length} 個點`;
+  }
+
+  // 3. 更新介面
   if (allTracks.length > 1) {
     document.getElementById("routeSelectContainer").style.display = "block";
     allTracks.forEach((t, i) => {
@@ -423,7 +458,11 @@ function parseGPX(text) {
   } else {
     document.getElementById("routeSelectContainer").style.display = "none";
   }
-  loadRoute(0);
+
+  // 4. 只有在「有線條」才跑 loadRoute
+  if (allTracks.length > 0 && allTracks[0].points.length > 0) {
+    loadRoute(0);
+  }
 }
 
 function extractPoints(pts) {
