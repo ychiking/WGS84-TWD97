@@ -93,6 +93,64 @@
     .map-compass.show { opacity: 1; visibility: visible; }
     .shortcut-btn { font-size: 12px; background: #f0f0f0; color: #555; padding: 5px 12px; border-radius: 15px; text-decoration: none; border: 1px solid #ddd; font-weight: bold; }
 
+/* 新增：地圖底部多檔案按鈕欄樣式 */
+.multi-gpx-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    display: flex;
+    overflow-x: auto; /* 檔案多時可水平滾動 */
+    padding: 2px 0;
+    box-sizing: border-box;
+    pointer-events: auto; /* 確保按鈕可點擊 */
+}
+.multi-gpx-bar::-webkit-scrollbar { height: 4px; }
+.multi-gpx-bar::-webkit-scrollbar-thumb { background: #888; border-radius: 2px; }
+
+.gpx-file-btn {
+	  pointer-events: auto !important;
+    flex: 0 0 auto;
+    background: transparent;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    border-left: 4px solid transparent;
+    border-radius: 2px;
+    margin: 2px;
+    
+    /* --- 以下為修改重點 --- */
+    white-space: nowrap;      /* 強制不換行 */
+    overflow: hidden;         /* 隱藏超出範圍的文字 */
+    text-overflow: ellipsis;  /* 超出部分顯示為 "..." */
+    max-width: 250px;         /* 限制按鈕最大寬度，您可以根據 40 個位元的感覺調整此數值 */
+    display: inline-block;    /* 確保寬度限制生效 */
+    vertical-align: middle;
+    /* ---------------------- */
+    
+    opacity: 0.8;
+    transition: all 0.2s;
+}
+.gpx-file-btn:hover { opacity: 1; background: rgba(255,255,255,0.1); }
+.gpx-file-btn.active { opacity: 1; font-weight: bold; border-left-width: 6px; }
+
+/* 針對關閉按鈕的特殊樣式 */
+.gpx-file-btn.close-btn { 
+    border-left: none; 
+    color: #ff4d4d; 
+    font-weight: bold; 
+    margin-right: 8px;
+    border: 1px solid #ff4d4d;
+    border-radius: 15px;
+    padding: 4px 10px;
+}
+.gpx-file-btn.close-btn:hover { background: rgba(255, 77, 77, 0.2); }
+
+
     @media (max-width: 768px) { #map { height: 45vh; } #chartContainer { height: 220px; } }
   </style>
 </head>
@@ -101,11 +159,34 @@
   <div class="upload-row">
     <input type="file" id="gpxInput" accept=".gpx" style="display: none;" />
     <label for="gpxInput" class="custom-file-upload">匯入 GPX</label>
+    
+    <input type="file" id="multiGpxInput" accept=".gpx" multiple style="display: none;" />
+    <label for="multiGpxInput" class="custom-file-upload" style="background-color: #28a745; margin-left: 5px;">匯入多個 GPX</label>
+    
     <span id="fileNameDisplay" style="font-weight:600; margin-left:5px;">尚未選擇檔案</span>
   </div>
   <div class="subtitle">
-    <strong>YCHiking-GPX 路線檢視工具 v260331</strong>
+    <strong>YCHiking-GPX 路線檢視工具 v260403</strong>
     <div id="navShortcuts" style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;"></div>
+    
+    <div id="routeSelectContainer" style="display:none; margin-top: 10px;">
+      <select id="routeSelect" style="padding: 6px 15px; border-radius: 20px; border: 1px solid #ccc;"></select>
+    </div>
+  </div>
+</div>
+
+
+  <div class="subtitle">
+
+    
+    <div id="multiRouteSelectContainer" style="display:none; margin-top: 10px;">
+      <span style="font-size: 14px; color: #555;">切換檔案：</span>
+      <select id="multiRouteSelect" style="padding: 6px 15px; border-radius: 20px; border: 1px solid #ccc; max-width: 250px;"></select>
+      <button onclick="clearAllGpx()" style="margin-left:8px; padding: 4px 10px; border-radius: 15px; border: 1px solid #ff4d4d; color: #ff4d4d; background: white; cursor: pointer;">關閉所有</button>
+    </div>
+
+    <div id="navShortcuts" style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;"></div>
+    
     <div id="routeSelectContainer" style="display:none; margin-top: 10px;">
       <select id="routeSelect" style="padding: 6px 15px; border-radius: 20px; border: 1px solid #ccc;"></select>
     </div>
@@ -113,6 +194,7 @@
 </div>
 
 <div id="map">
+	<div id="multiGpxBtnBar" class="multi-gpx-bar" style="display: none;"></div>
  	<div id="mapCompass" class="map-compass">
     <svg width="100%" height="100%" viewBox="-10 -10 160 160">
         <circle cx="70" cy="70" r="65" fill="none" stroke="#ccc" stroke-width="1" />
