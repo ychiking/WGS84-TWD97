@@ -89,7 +89,6 @@
 		    font-size: 14px;
 		    text-shadow: 1px 1px 0 white;
 		}
-		/* 專門給 iPhone 用的偽全螢幕樣式 */
 .iphone-fullscreen {
     position: fixed !important;
     top: 0 !important;
@@ -99,23 +98,31 @@
     z-index: 9999 !important;
     background: white;
     display: flex !important;
-    flex-direction: column !important; /* 讓地圖跟 Bar 上下排列 */
+    flex-direction: column !important; /* 地圖在上，按鈕在下 */
 }
 
-/* 確保地圖在全螢幕時不要寫死 100vh，而是自動分配空間 */
+/* 讓地圖在全螢幕容器中自動撐開 */
 .iphone-fullscreen #map {
-    flex: 1 !important; /* 自動撐滿剩餘空間 */
-    height: auto !important;
+    flex: 1 !important; 
+    height: auto !important; 
+    width: 100% !important;
 }
 
-/* 針對切換 Bar 的樣式優化 */
+/* 關鍵：讓按鈕列在全螢幕時顯示在最上層 */
 .iphone-fullscreen #multiGpxContainer {
-    position: relative !important;
-    z-index: 10000 !important; /* 比容器更高 */
-    background: rgba(255, 255, 255, 0.9);
-    padding: 10px 0;
-    border-top: 1px solid #ccc;
     display: block !important;
+    position: relative !important;
+    z-index: 10000 !important;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 10px 0;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.2);
+}
+
+/* 調整按鈕在手機全螢幕下的滾動體驗 */
+.iphone-fullscreen #multiGpxButtons {
+    overflow-x: auto;
+    white-space: nowrap;
+    padding: 5px 10px;
 }
 		
     .custom-file-upload { display: inline-block; padding: 8px 15px; cursor: pointer; background: #007bff; color: white; border-radius: 20px; font-size: 14px; font-weight: bold; }
