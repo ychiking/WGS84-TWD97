@@ -1971,41 +1971,51 @@ function renderMultiGpxButtons() {
     const bar = document.getElementById('multiGpxBtnBar');
     if (!bar) return;
 
-    // --- 修改這裡：為「關閉」按鈕加入事件阻斷 ---
     bar.innerHTML = ''; // 先清空
+    
+    // 1. 產生關閉按鈕
     const closeBtn = document.createElement('button');
     closeBtn.className = 'gpx-file-btn close-btn';
     closeBtn.innerHTML = '✕ 關閉';
     closeBtn.onclick = (e) => {
-        if (e) L.DomEvent.stopPropagation(e); // 關鍵：阻止事件傳到地圖
+        if (e) L.DomEvent.stopPropagation(e); 
         clearAllMultiGPX();
-        location.reload()
+        location.reload();
     };
     bar.appendChild(closeBtn);
     
+    // 2. 產生各個 GPX 軌跡按鈕
     multiGpxStack.forEach((gpx, i) => {
-    const btn = document.createElement('button');
-    btn.className = 'gpx-file-btn';
-    btn.id = `multi-btn-${i}`;
-    
-    // 處理字數限制
-    const maxLength = 40;
-    btn.textContent = gpx.name.length > maxLength 
-        ? gpx.name.substring(0, maxLength) + "..." 
-        : gpx.name;
+        const btn = document.createElement('button');
+        btn.className = 'gpx-file-btn';
+        btn.id = `multi-btn-${i}`;
+        
+        const maxLength = 40;
+        btn.textContent = gpx.name.length > maxLength 
+            ? gpx.name.substring(0, maxLength) + "..." 
+            : gpx.name;
 
-    // --- 修改重點：確保 title 正確寫入屬性 ---
-    btn.setAttribute('title', gpx.name); 
-    
-    btn.style.borderLeft = `5px solid ${gpx.color}`;
-    
-    btn.onclick = (e) => {
-        if (e) L.DomEvent.stopPropagation(e);
-        switchMultiGpx(i);
-    };
-    
-    bar.appendChild(btn);
-});
+        btn.setAttribute('title', gpx.name); 
+        btn.style.borderLeft = `5px solid ${gpx.color}`;
+        
+        btn.onclick = (e) => {
+            if (e) L.DomEvent.stopPropagation(e);
+            switchMultiGpx(i);
+        };
+        
+        bar.appendChild(btn);
+    });
+
+    // --- 【關鍵修正：阻止事件傳遞到地圖】 ---
+    // 這幾行會讓你在這條 Bar 上滑動時，地圖乖乖不動
+    L.DomEvent.disableClickPropagation(bar);
+    L.DomEvent.disableScrollPropagation(bar);
+
+    // 針對行動裝置觸控的徹底阻斷
+    const stopMe = (e) => e.stopPropagation();
+    bar.addEventListener('touchstart', stopMe, { passive: true });
+    bar.addEventListener('touchmove', stopMe, { passive: true });
+    bar.addEventListener('pointerdown', stopMe, { passive: true });
 }
 
 function clearAllMultiGPX() {
