@@ -443,6 +443,12 @@ document.getElementById("gpxInput").addEventListener("change", e => {
     
     document.getElementById("fileNameDisplay").textContent = file.name;
     map.closePopup(); 
+    
+    const toggleBtn = document.getElementById("toggleChartBtn");
+    if (toggleBtn) {
+        toggleBtn.style.display = "block"; // 匯入後才顯示
+        toggleBtn.textContent = "收合高度表"; 
+    }
 
     const reader = new FileReader();
     reader.onload = () => parseGPX(reader.result);

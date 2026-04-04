@@ -119,10 +119,11 @@
 }
 
 /* 調整按鈕在手機全螢幕下的滾動體驗 */
-.iphone-fullscreen #multiGpxButtons {
-    overflow-x: auto;
-    white-space: nowrap;
-    padding: 5px 10px;
+.iphone-fullscreen #multiGpxBtnBar {
+	  display: flex !important;
+	  background: rgba(0, 0, 0, 0.9) !important;
+	  flex-shrink: 0 !important;
+    padding-bottm: env(safe-area-inset-bottom);
 }
 		
     .custom-file-upload { display: inline-block; padding: 8px 15px; cursor: pointer; background: #007bff; color: white; border-radius: 20px; font-size: 14px; font-weight: bold; }
