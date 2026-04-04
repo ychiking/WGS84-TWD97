@@ -104,27 +104,16 @@
 /* 讓地圖在全螢幕容器中自動撐開 */
 .iphone-fullscreen #map {
     flex: 1 !important; 
-    height: 80% !important; 
+    height: 100% !important; 
     width: 100% !important;
 }
 
-/* 關鍵：讓按鈕列在全螢幕時顯示在最上層 */
-.iphone-fullscreen #multiGpxContainer {
-    display: block !important;
-    position: relative !important;
-    z-index: 10000 !important;
-    background: rgba(255, 255, 255, 0.95);
-    padding: 10px 0;
-    box-shadow: 0 -2px 10px rgba(0,0,0,0.2);
-}
 
 /* 調整按鈕在手機全螢幕下的滾動體驗 */
 .iphone-fullscreen #multiGpxBtnBar {
 	  display: flex !important;
 	  z-index: 10001 !important;
-	  background: rgba(0, 0, 0, 0.9) !important;
 	  flex-shrink: 0 !important;
-    padding-bottm: env(safe-area-inset-bottom);
 }
 		
     .custom-file-upload { display: inline-block; padding: 8px 15px; cursor: pointer; background: #007bff; color: white; border-radius: 20px; font-size: 14px; font-weight: bold; }
