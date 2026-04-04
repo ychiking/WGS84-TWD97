@@ -137,10 +137,6 @@
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch; /* 讓手機滑動有慣性流暢感 */
     
-    padding: 4px 2px;
-    box-sizing: border-box;
-    pointer-events: auto;
-    
     pointer-events: auto !important; /* 確保攔截點擊與滑動 */
     touch-action: pan-x;
 }
@@ -183,15 +179,33 @@
     opacity: 1; 
     font-weight: bold; 
     background: rgba(255, 255, 255, 0.15);
+    
 }
 
 /* 關閉按鈕修正：也必須禁止壓縮 */
-.gpx-file-btn.close-btn { 
+.gpx-file-btn.close-btn {
     flex: 0 0 auto !important;
-    border: 1px solid #ff4d4d;
-    color: #ff4d4d;
-    border-radius: 20px;
-    margin-left: 10px;
+    border: 1px solid #ff4d4d !important;
+    color: #ff4d4d !important;
+    background: transparent !important;
+    
+    /* 1. 關鍵：增加上下 margin 讓它縮進去，產生空隙 */
+    margin: 6px 10px 6px 15px !important; 
+    
+    /* 2. 關鍵：設定固定高度，不要讓它撐滿整個 Bar */
+    height: 28px !important; 
+    
+    /* 3. 讓文字與圓框完美置中 */
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    
+    /* 圓角與內距 */
+    border-radius: 20px !important;
+    padding: 0 12px !important;
+    font-size: 13px !important;
+    white-space: nowrap;
+    cursor: pointer;
 }
 .gpx-file-btn.close-btn:hover { background: rgba(255, 77, 77, 0.2); }
 
