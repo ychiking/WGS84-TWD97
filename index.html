@@ -33,7 +33,7 @@
             font-size: 14px;
             z-index: 1001; /* 確保在圖表上方 */
         }
-    #routeInfo { margin-top: 5px; padding: 12px 16px; background: #fafafa; border-top: 1px solid #ddd; font-size: 15px; line-height: 1.6; }
+    #routeInfo { margin-top: 5px; padding: 8px 8px; background: #fafafa; border-top: 1px solid #ddd; font-size: 15px; line-height: 1.6; }
     .upload-row { display: flex; align-items: center; gap: 8px; }
     .subtitle { margin-top: 8px; font-size: 14px; color: #555; line-height: 1.4; }
     .modal-overlay {
@@ -109,19 +109,9 @@
 
 
 .iphone-fullscreen #multiGpxBtnBar {
-    display: flex !important;
-    z-index: 10001 !important;
-    flex-shrink: 0 !important;
-    
-    /* 關鍵：避開 iPhone 底部系統手勢區域 */
-    padding-bottom: calc(env(safe-area-inset-bottom) + 40px) !important; 
-    
-    /* 確保背景延伸到底部，視覺才不會斷層 */
-    background: rgba(0, 0, 0, 0.9) !important;
-    
-    /* 確保內容可以水平滑動而不受干擾 */
-    overflow-x: auto !important;
-    touch-action: pan-x !important; /* 強制只允許水平滑動 */
+	  display: flex !important;
+	  z-index: 10001 !important;
+	  flex-shrink: 0 !important;
 }
 		
     .custom-file-upload { display: inline-block; padding: 8px 15px; cursor: pointer; background: #007bff; color: white; border-radius: 20px; font-size: 14px; font-weight: bold; }
@@ -190,6 +180,30 @@
     
 }
 
+/* 結合按鈕的特殊視覺區隔 */
+.gpx-file-btn.combined-btn {
+    background-color: rgba(60, 60, 60, 0.9) !important; /* 深一點的背景 */
+    font-weight: bold !important;
+    color: #ffd700 !important; /* 金色或亮色文字 */
+}
+
+/* 選中狀態時，紅色的指示線（紅框空隙邏輯） */
+.gpx-file-btn.active {
+    background-color: rgba(255, 255, 255, 0.15) !important;
+    position: relative;
+}
+
+/* 之前討論的紅條不貼上下邏輯 */
+.gpx-file-btn.active::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    top: 20%;
+    height: 60%;
+    width: 3px;
+    background: #ff4d4d;
+}
+
 /* 關閉按鈕修正：也必須禁止壓縮 */
 .gpx-file-btn.close-btn {
     flex: 0 0 auto !important;
@@ -215,50 +229,48 @@
     white-space: nowrap;
     cursor: pointer;
 }
+
 .gpx-file-btn.close-btn:hover { background: rgba(255, 77, 77, 0.2); }
 
 
+/* 版權宣告位移效果 */
+.leaflet-bottom.leaflet-right {
+    transition: margin-bottom
+}
+
+body.has-gpx-bar .leaflet-bottom.leaflet-right {
+    margin-bottom: 45px !important; /* 配合 GPX Bar 的高度 */
+}
+    /*<input type="file" id="gpxInput" accept=".gpx" style="display: none;" /> */
+    /* <label for="gpxInput" class="custom-file-upload">匯入 GPX</label> */
+    /*<label for="multiGpxInput" class="custom-file-upload" style="background-color: #28a745; margin-left: 5px;">匯入多個 GPX</label>  */
+    
+    
     @media (max-width: 768px) { #map { height: 45vh; } #chartContainer { height: 220px; } }
   </style>
 </head>
 <body>
 <div id="header">
+	<strong style="font-size: 12px; color: #333;">YCHiking-GPX 路線檢視工具 v260406</strong> 
   <div class="upload-row">
     <input type="file" id="gpxInput" accept=".gpx" style="display: none;" />
-    <label for="gpxInput" class="custom-file-upload">匯入 GPX</label>
+ 
     
     <input type="file" id="multiGpxInput" accept=".gpx" multiple style="display: none;" />
-    <label for="multiGpxInput" class="custom-file-upload" style="background-color: #28a745; margin-left: 5px;">匯入多個 GPX</label>
-    
+    <label for="multiGpxInput" class="custom-file-upload">匯入 GPX</label>   
     <span id="fileNameDisplay" style="font-weight:600; margin-left:5px;">尚未選擇檔案</span>
   </div>
-  <div class="subtitle">
-    <strong>YCHiking-GPX 路線檢視工具 v260404</strong>
-    <div id="navShortcuts" style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;"></div>
-    
-    <div id="routeSelectContainer" style="display:none; margin-top: 10px;">
-      <select id="routeSelect" style="padding: 6px 15px; border-radius: 20px; border: 1px solid #ccc;"></select>
+<div class="subtitle">
+  	<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px;">   
+    <div id="navShortcuts" style="display: flex; gap: 8px; align-items: center;"></div>  
+    <div id="routeSelectContainer" style="display: none; margin-top: 0;">
+    <select id="routeSelect" style="padding: 6px 12px; border-radius: 16px; border: 1px solid #ccc;"></select>
     </div>
+    
   </div>
 </div>
-
-
-  <div class="subtitle">
-
-    
-    <div id="multiRouteSelectContainer" style="display:none; margin-top: 10px;">
-      <span style="font-size: 14px; color: #555;">切換檔案：</span>
-      <select id="multiRouteSelect" style="padding: 6px 15px; border-radius: 20px; border: 1px solid #ccc; max-width: 250px;"></select>
-      <button onclick="clearAllGpx()" style="margin-left:8px; padding: 4px 10px; border-radius: 15px; border: 1px solid #ff4d4d; color: #ff4d4d; background: white; cursor: pointer;">關閉所有</button>
-    </div>
-
-    <div id="navShortcuts" style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;"></div>
-    
-    <div id="routeSelectContainer" style="display:none; margin-top: 10px;">
-      <select id="routeSelect" style="padding: 6px 15px; border-radius: 20px; border: 1px solid #ccc;"></select>
-    </div>
-  </div>
 </div>
+
 
 <div id="map">
 	<div id="multiGpxBtnBar" class="multi-gpx-bar" style="display: none;"></div>
