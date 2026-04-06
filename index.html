@@ -25,10 +25,10 @@
     #toggleChartBtn {
             margin: 5px auto;
             padding: 5px 15px;
-            background: #555;
+            background: #1a73e8;
             color: white;
             border: none;
-            border-radius: 4px;
+            border-radius: 20px;
             cursor: pointer;
             font-size: 14px;
             z-index: 1001; /* 確保在圖表上方 */
@@ -89,6 +89,27 @@
 		    font-size: 14px;
 		    text-shadow: 1px 1px 0 white;
 		}
+		.shortcut-btn {
+    display: inline-block;
+    font-size: 12px;
+    background: #f0f0f0;
+    color: #555;
+    padding: 5px 12px;
+    border-radius: 15px;
+    
+    /* 關鍵修改 */
+    border: 1px solid #ddd;   /* 確保有淡淡的邊框 */
+    cursor: pointer;          /* 讓滑鼠移上去顯示手指 */
+    font-family: inherit;      /* 繼承字體 */
+    line-height: 1.4;
+    outline: none;            /* 移除點擊時的藍色外框 */
+    vertical-align: middle;
+}
+
+.shortcut-btn:hover {
+    background: #e0e0e0;      /* 增加滑動時的深色效果 */
+}
+		
 .iphone-fullscreen {
     position: fixed !important;
     top: 0 !important;
@@ -240,6 +261,15 @@
 
 body.has-gpx-bar .leaflet-bottom.leaflet-right {
     margin-bottom: 45px !important; /* 配合 GPX Bar 的高度 */
+}
+
+body.has-gpx-bar .map-compass {
+    bottom: 55px; /* 原本 10px + Bar 高度約 45px = 55px */
+}
+
+/* 3. 如果是 iPhone 全螢幕模式，可能需要推更高避免擋到系統條 */
+body.has-gpx-bar.iphone-fullscreen .map-compass {
+    bottom: 75px;
 }
     /*<input type="file" id="gpxInput" accept=".gpx" style="display: none;" /> */
     /* <label for="gpxInput" class="custom-file-upload">匯入 GPX</label> */

@@ -911,7 +911,7 @@ const CombinedControl = L.Control.extend({
         
         const createBtn = (html, title, border) => {
             const btn = L.DomUtil.create('a', '', container);
-            btn.innerHTML = html; btn.href = '#'; btn.title = title;
+            btn.innerHTML = html; btn.title = title;
             btn.style.cssText = `font-size:18px; background:white; text-align:center; line-height:30px; width:30px; height:30px; display:block; cursor:pointer; ${border ? 'border-bottom:1px solid #ccc;' : ''}`;
             return btn;
         };
@@ -1659,7 +1659,7 @@ function renderRouteInfo() {
       listHtml += `<tr><td><span class="wpt-link" onclick="focusWaypoint(${w.lat}, ${w.lon}, '${w.name}')">${i + 1}</span></td><td>${w.localTime}</td><td>${w.name}</td></tr>`; 
     });
     listHtml += `</tbody></table>`;
-    shortcutsHtml += `<a href="#anchorWpt" class="shortcut-btn">📍 航點列表</a>`;
+    shortcutsHtml += `<button type="button" class="shortcut-btn" onclick="document.getElementById('anchorWpt').scrollIntoView({behavior: 'smooth'})">📍 航點列表</button>`;
   }
 
   // --- 關鍵修改：山岳偵測改為「全部手動」模式 ---
@@ -1672,7 +1672,7 @@ function renderRouteInfo() {
             <p style="margin-bottom:8px; color:#666; font-size:13px;">📍 已準備好偵測此路線周圍山岳</p>
             <button onclick="detectPeaksAlongRoute(true)" 
         style="padding: 10px 25px; /* 橢圓形通常兩側留白更多，外觀更協調 */
-               background: #2c3e50; 
+               background: #1a73e8; 
                color: white; 
                border: none; 
                
@@ -1696,8 +1696,8 @@ function renderRouteInfo() {
         </div>
     </div>`;
   
-  shortcutsHtml += `<a href="#anchorPeak" class="shortcut-btn">⛰️ 沿途山岳</a>`;
-  shortcutsHtml += `<a href="javascript:location.reload();" class="shortcut-btn">✕ 關閉檔案</a>`;
+  shortcutsHtml += `<button type="button" class="shortcut-btn" onclick="document.getElementById('anchorPeak').scrollIntoView({behavior: 'smooth'})">⛰️ 沿途山岳</button>`;
+  shortcutsHtml += `<button type="button" class="shortcut-btn" onclick="location.reload()">✕ 關閉檔案</button>`;
 
   wptListContainer.innerHTML = listHtml;
   wptListContainer.style.display = "block";
@@ -1740,7 +1740,7 @@ async function detectPeaksAlongRoute(isManual = false) {
                 <p style="margin-bottom:10px; color:#666; font-size:14px;">📍 路線已載入：準備好偵測此範圍內之山岳</p>
 				<button onclick="detectPeaksAlongRoute(true)" 
         style="padding: 10px 25px; /* 橢圓形通常兩側留白更多，外觀更協調 */
-               background: #2c3e50; 
+               background: #1a73e8; 
                color: white; 
                border: none; 
                
@@ -2266,7 +2266,7 @@ function renderMultiGpxButtons() {
     // 1. 產生關閉按鈕
     const closeBtn = document.createElement('button');
     closeBtn.className = 'gpx-file-btn close-btn';
-    closeBtn.innerHTML = '✕ 關閉';
+    closeBtn.innerHTML = '✕ 關閉所有檔案';
     closeBtn.onclick = (e) => {
         if (e) L.DomEvent.stopPropagation(e); 
         clearAllMultiGPX();
