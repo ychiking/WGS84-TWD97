@@ -2266,7 +2266,7 @@ function renderMultiGpxButtons() {
     // 1. 產生關閉按鈕
     const closeBtn = document.createElement('button');
     closeBtn.className = 'gpx-file-btn close-btn';
-    closeBtn.innerHTML = '✕ 關閉所有檔案';
+    closeBtn.innerHTML = '✕ 關閉檔案';
     closeBtn.onclick = (e) => {
         if (e) L.DomEvent.stopPropagation(e); 
         clearAllMultiGPX();
