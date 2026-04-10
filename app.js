@@ -2136,12 +2136,13 @@ document.getElementById("multiGpxInput").addEventListener("change", async (e) =>
     if (multiGpxStack.length > 0) {
         document.getElementById('multiGpxBtnBar').style.display = 'flex';
         renderMultiGpxButtons();
-        map.fitBounds(allBounds);
+        // map.fitBounds(allBounds);
         
-        const firstLayer = multiGpxStack[0].layer;
-		    if (firstLayer) {
-		        map.fitBounds(firstLayer.getBounds(), { padding: [20, 20], maxZoom: 16 });
-		    }
+				const firstGpx = multiGpxStack[0];
+				    if (firstGpx && firstGpx.layer) {
+				        // 這裡手動呼叫縮放，不受 switchMultiGpx 內部的 window.event 限制
+				        map.fitBounds(firstGpx.layer.getBounds(), { padding: [20, 20], maxZoom: 16 });
+				    }
         
         // 最後切換到第一個軌跡
         switchMultiGpx(0); 
