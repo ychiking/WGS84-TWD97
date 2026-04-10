@@ -720,9 +720,9 @@ function loadRoute(index, customColor = null) { // 1. 新增參數 customColor
     }).addTo(map);
 
     // ... 以下縮放、起終點、航點繪製邏輯保持不變 ...
-    if (polyline.getBounds().isValid()) {
-        map.fitBounds(polyline.getBounds(), { padding: [40, 40] });
-    }
+    // if (polyline.getBounds().isValid()) {
+    //    map.fitBounds(polyline.getBounds(), { padding: [40, 40] });
+    // }
 
     const mStart = L.marker([trackPoints[0].lat, trackPoints[0].lon], { icon: startIcon }).addTo(map);
     mStart.on('click', (e) => { L.DomEvent.stopPropagation(e); showCustomPopup(0, "起點"); });
@@ -2138,6 +2138,11 @@ document.getElementById("multiGpxInput").addEventListener("change", async (e) =>
         renderMultiGpxButtons();
         map.fitBounds(allBounds);
         
+        const firstLayer = multiGpxStack[0].layer;
+		    if (firstLayer) {
+		        map.fitBounds(firstLayer.getBounds(), { padding: [20, 20], maxZoom: 16 });
+		    }
+        
         // 最後切換到第一個軌跡
         switchMultiGpx(0); 
     }
@@ -2174,7 +2179,11 @@ function switchMultiGpx(index) {
                 });
             
             
-            map.fitBounds(item.layer.getBounds(), { padding: [20, 20], maxZoom: 16 });
+            // map.fitBounds(item.layer.getBounds(), { padding: [20, 20], maxZoom: 16 });
+            if (window.event && window.event.type === 'click' && window.event.target.closest('.gpx-file-btn')) {
+    // 只有當「真正的點擊事件」發生在「GPX Bar 的按鈕」上時，才縮放地圖
+    map.fitBounds(item.layer.getBounds(), { padding: [20, 20], maxZoom: 16 });
+}
         } else {
             // --- 未選中的檔案 ---
             item.layer.setStyle({ 
