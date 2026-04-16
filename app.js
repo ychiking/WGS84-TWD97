@@ -776,11 +776,24 @@ function loadRoute(index, customColor = null) {
     }
 
     // 清除舊圖層
-    if (polyline) map.removeLayer(polyline);
-    markers.forEach(m => map.removeLayer(m));
-    wptMarkers.forEach(m => map.removeLayer(m));
-    if (window.chart) { window.chart.destroy(); window.chart = null; }
-    markers = []; wptMarkers = []; polyline = null; 
+
+if (polyline) {
+    map.removeLayer(polyline);
+    polyline = null; 
+}
+
+// ✅ 關鍵：如果你的程式碼中有使用多段線，這行能確保地圖上所有線條被清空
+map.eachLayer(function (layer) {
+    if (layer instanceof L.Polyline && !(layer instanceof L.Polygon)) {
+        map.removeLayer(layer);
+    }
+});
+
+markers.forEach(m => map.removeLayer(m));
+wptMarkers.forEach(m => map.removeLayer(m));
+if (window.chart) { window.chart.destroy(); window.chart = null; }
+markers = []; wptMarkers = []; 
+// --------------------------------------------------
 
     // --- 核心邏輯：單純判定目前地圖範圍是否包含目標 ---
     const checkAndFitBounds = (targetBounds) => {
