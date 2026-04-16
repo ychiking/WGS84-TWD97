@@ -806,28 +806,35 @@ function loadRoute(index, customColor = null) {
         }
     };
 
-    // --- 2. 繪製軌跡 ---
-        // --- 2. 繪製軌跡 ---
+    // --- 2. 繪製    // --- 2. 繪製軌跡 ---
     if (trackPoints && trackPoints.length > 0) {
-        // ✅ 修正多餘直線問題：判斷是否為「結合結果」
-        // 如果你的結合物件有設定 isCombined 標記，或名稱包含 "結合"
-        if (sel.name && sel.name.includes("結合") && sel.segments) {
-            // 如果你在結合時有保留原始段落資料 (sel.segments)，則分段繪製
-            const polylineGroup = [];
-            sel.segments.forEach(seg => {
-                const p = L.polyline(seg.map(p => [p.lat, p.lon]), {
-                    color: finalColor, weight: 6, opacity: 0.8
-                }).addTo(map);
-                polylineGroup.push(p);
-            });
-            // 為了讓後面的 getBounds() 能運作，建立一個虛擬群組
-            polyline = L.featureGroup(polylineGroup).addTo(map);
-        } else {
-            // 一般單一路線繪製
-            polyline = L.polyline(trackPoints.map(p => [p.lat, p.lon]), {
-                color: finalColor, weight: 6, opacity: 0.8
-            }).addTo(map);
+        // ✅ 修正多餘直線：偵測跳躍點，將軌跡切分為多個段落
+        const segments = [];
+        let currentSegment = [ [trackPoints[0].lat, trackPoints[0].lon] ];
+
+        for (let i = 1; i < trackPoints.length; i++) {
+            const p1 = trackPoints[i - 1];
+            const p2 = trackPoints[i];
+            
+            // 計算兩點間的歐幾里得距離（約略判斷）
+            // 0.01 度大約是 1 公里，這裡設定超過 0.005 度 (約 500m) 就斷開
+            const dist = Math.sqrt(Math.pow(p2.lat - p1.lat, 2) + Math.pow(p2.lon - p1.lon, 2));
+
+            if (dist > 0.005) { 
+                // 距離太遠，視為不同路段，新開一個 segment
+                segments.push(currentSegment);
+                currentSegment = [];
+            }
+            currentSegment.push([p2.lat, p2.lon]);
         }
+        segments.push(currentSegment);
+
+        // 使用 L.polyline 的多重陣列特性，一次畫出所有不相連的段落
+        polyline = L.polyline(segments, {
+            color: finalColor, 
+            weight: 6, 
+            opacity: 0.8
+        }).addTo(map);
 
         checkAndFitBounds(polyline.getBounds());
 
@@ -853,6 +860,7 @@ function loadRoute(index, customColor = null) {
 
         if (typeof drawElevationChart === 'function') drawElevationChart();
     }
+
 
 
     // --- 3. 繪製航點 ---
