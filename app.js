@@ -801,8 +801,8 @@ function loadRoute(index, customColor = null) {
                 // ✅ 其他匯入的 GPX 檔案：也要顯示，但更淡一點
                 layer.setStyle({ 
                     color: item.color || "#999", 
-                    opacity: 0.6, 
-                    weight: 3,
+                    opacity: 0.5, 
+                    weight: 4,
                     dashArray: null 
                 });
                 layer.bringToBack();
