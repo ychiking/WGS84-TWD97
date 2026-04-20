@@ -504,23 +504,31 @@
     }
     
     /* 優化滑動條在 iPhone 上的手感 */
-#gpxProgressBar {
-    -webkit-appearance: none;
-    background: #ddd;
-    height: 8px;
-    border-radius: 4px;
+/* 強制在 iPhone 全螢幕模式下顯示 Bar */
+.iphone-fullscreen #map-control-bar {
+    display: flex !important;
+    z-index: 20000 !important; /* 提高層級，確保在 Leaflet 容器之上 */
+    bottom: auto !important;
+    top: 20px !important;
 }
 
-/* 讓滑動按鈕在 iPhone 上變大一點，好按很多 */
+/* 讓滑動條在手機上更好操作 */
+#gpxProgressBar {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 10px;
+    background: #e0e0e0;
+    border-radius: 5px;
+}
+
 #gpxProgressBar::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 24px;
-    height: 24px;
+    width: 28px; /* 加大按鈕讓手指好抓 */
+    height: 28px;
     background: #1a73e8;
     border-radius: 50%;
-    border: 2px solid white;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-    cursor: pointer;
+    border: 3px solid white;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
 }
   </style>
 </head>
