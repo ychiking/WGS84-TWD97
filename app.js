@@ -3070,39 +3070,59 @@ mapSizeCtrl.onAdd = function() {
     list.style.zIndex = '1000';
 
     function updateList() {
-        list.innerHTML = ''; 
-        const isFS = !!(document.fullscreenElement || document.webkitFullscreenElement || document.body.classList.contains('iphone-fullscreen'));
-        const currentSize = window.currentMapSize || 'standard';
+    list.innerHTML = ''; 
+    
+    // 1. 偵測是否處於任何一種全螢幕狀態 (原生 或 iPhone 虛擬)
+    const isNativeFS = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    const isIphoneFS = document.body.classList.contains('iphone-fullscreen');
+    const isCurrentlyFull = isNativeFS || isIphoneFS;
+
+    // 2. 取得目前的尺寸 (預設為 standard)
+    const currentSize = window.currentMapSize || 'standard';
+    
+    const allOptions = [
+        { label: '標準', val: 'standard' },
+        { label: '大圖', val: 'large' },
+        { label: '全螢幕', val: 'full' }
+    ];
+
+    allOptions.forEach((opt) => {
+        // --- 核心修正邏輯 ---
         
-        const allOptions = [
-            { label: '標準', val: 'standard' },
-            { label: '大圖', val: 'large' },
-            { label: '全螢幕', val: 'full' }
-        ];
+        // 如果目前是全螢幕：隱藏「全螢幕」選項，顯示「標準」與「大圖」
+        if (isCurrentlyFull) {
+            if (opt.val === 'full') return;
+        } 
+        // 如果目前非全螢幕：隱藏「當前尺寸」選項，顯示另外兩個
+        else {
+            if (opt.val === currentSize) return;
+        }
 
-        allOptions.forEach((opt) => {
-            if (isFS && opt.val === 'full') return;
-            if (!isFS && opt.val === currentSize) return;
-            const item = L.DomUtil.create('div', '', list);
-            item.innerHTML = opt.label;
-            item.style.padding = '0 12px';
-            item.style.fontSize = '13px';
-            item.style.lineHeight = '30px';
-            item.style.cursor = 'pointer';
-            item.style.whiteSpace = 'nowrap';
-            if (list.children.length > 1) item.style.borderLeft = '1px solid #eee';
+        const item = L.DomUtil.create('div', '', list);
+        item.innerHTML = opt.label;
+        item.style.padding = '0 12px';
+        item.style.fontSize = '13px';
+        item.style.lineHeight = '30px';
+        item.style.cursor = 'pointer';
+        item.style.whiteSpace = 'nowrap';
+        if (list.children.length > 1) item.style.borderLeft = '1px solid #eee';
 
-            L.DomEvent.on(item, 'click', function(e) {
-                L.DomEvent.stop(e);
-                if (opt.val === 'full') window.toggleFullScreen();
-                else {
-                    if (isFS) window.toggleFullScreen();
-                    window.changeMapSize(opt.val);
+        L.DomEvent.on(item, 'click', function(e) {
+            L.DomEvent.stop(e);
+            
+            if (opt.val === 'full') {
+                window.toggleFullScreen();
+            } else {
+                // 如果在 iPhone 全螢幕下點擊「標準」或「大圖」，需先退出全螢幕
+                if (isCurrentlyFull) {
+                    window.toggleFullScreen(); 
                 }
-                list.style.display = 'none'; 
-            });
+                window.changeMapSize(opt.val);
+            }
+            list.style.display = 'none'; 
         });
-    }
+    });
+}
 
     L.DomEvent.on(mainBtn, 'click', function(e) {
         L.DomEvent.stop(e);
