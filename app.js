@@ -2957,7 +2957,7 @@ document.addEventListener('fullscreenchange', () => {
 window.changeMapSize = function(size) {
     const mapDiv = document.getElementById('map');
     
-    // 1. 退出所有全螢幕狀態
+    // 1. 退出全螢幕狀態
     if (document.fullscreenElement || document.webkitFullscreenElement) {
         if (document.exitFullscreen) document.exitFullscreen();
         else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
@@ -2966,10 +2966,10 @@ window.changeMapSize = function(size) {
     mapDiv.classList.remove('iphone-fullscreen');
     document.body.style.overflow = '';
 
-    // 2. 重新定義高度 (解決手機版標準比中圖大的問題)
+    // 2. 重新定義高度：確保手機上 標準 < 中圖 < 大圖
     const isMobile = window.innerWidth <= 768;
     const heights = {
-        'standard': isMobile ? '40vh' : '520px', // 手機改用 vh，電腦維持 px
+        'standard': isMobile ? '45vh' : '520px', // 手機用 40vh (約 320-350px)
         'medium': '65vh',
         'large': '85vh'
     };
@@ -2977,17 +2977,20 @@ window.changeMapSize = function(size) {
     if (!heights[size]) return;
     mapDiv.style.height = heights[size];
 
-    // 3. 刷新地圖與進度條
+    // 3. 解決地圖灰色與 Scroll Bar 顯示問題
     setTimeout(() => {
         map.invalidateSize({ animate: true });
         map.panBy([0, 0]); 
 
-        if (window.updateVisibility) window.updateVisibility();
+        // 呼叫 setupProgressBar 內部的顯示判斷
+        if (typeof updateVisibility === 'function') {
+            updateVisibility();
+        }
 
         if (size === 'large' || size === 'medium') {
             mapDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
-    }, 400);
+    }, 400); 
 };
 
 window.toggleFullScreen = function() {
