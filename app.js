@@ -3078,6 +3078,20 @@ mapSizeCtrl.onAdd = function() {
     list.style.boxShadow = '2px 2px 5px rgba(0,0,0,0.2)';
     list.style.flexDirection = 'row';
     list.style.zIndex = '1000';
+    
+    // --- 點擊地圖其他地方，關閉選單 ---
+		map.on('click', function() {
+		    if (list.style.display === 'flex') {
+		        list.style.display = 'none';
+		    }
+		});
+
+		// 為了確保手機端觸控也能正常反應，可以額外增加一個事件（選配）
+		map.on('movestart', function() {
+		    if (list.style.display === 'flex') {
+		        list.style.display = 'none';
+		    }
+		});
 
     function updateList() {
     list.innerHTML = ''; 
