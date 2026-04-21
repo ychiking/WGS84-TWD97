@@ -2972,7 +2972,7 @@ window.changeMapSize = function(size) {
     let heightVal;
     if (size === 'standard') {
         // 標準現在使用原本中圖的比例
-        heightVal = isMobile ? '65vh' : '600px'; 
+        heightVal = isMobile ? '45vh' : '520px'; 
     } else if (size === 'large') {
         heightVal = '85vh';
     }
