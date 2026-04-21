@@ -2,7 +2,24 @@
 const map = L.map("map", { tap: true }).setView([25.03, 121.56], 12);
 const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap" }).addTo(map);
 const otm = L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", { maxZoom: 18, maxNativeZoom: 17, attribution: 'OpenTopoMap' });
+// Happyman（當底圖）
+const happyman = L.tileLayer(
+  "https://tile.happyman.idv.tw/map/happyman/{z}/{x}/{y}.png",
+  {
+    maxZoom: 18,
+    attribution: "Happyman Map"
+  }
+);
 
+// 魯地圖（疊圖）
+const rudy = L.tileLayer(
+  "https://tile.happyman.idv.tw/map/moi_osm/{z}/{x}/{y}.png",
+  {
+    maxZoom: 18,
+    attribution: "Rudy Map",
+    opacity: 0.5   // 👈 疊圖透明度
+  }
+);
 const mapDiv = document.getElementById('map');
 const rsContainer = document.getElementById('routeSelectContainer');
 mapDiv.appendChild(rsContainer); // 強行塞回地圖內，但這是在 Leaflet 初始化之後做的
@@ -28,12 +45,13 @@ let gridLayers = {
 // --- 地圖初始化部分的圖層控制 ---
 const baseMaps = { 
     "標準地圖 (OSM)": osm, 
+    "魯地圖 (等高線)": rudy,    
     "等高線地形圖 (OpenTopo)": otm,
-    "內政部臺灣通用電子地圖": emap
-    
+    "內政部臺灣通用電子地圖": emap 
 };
 
 const overlayMaps = {
+		"Happyman疊圖": happyman, 
     "WGS84 格線": gridLayers.WGS84,
     "TWD97 格線": gridLayers.TWD97,
     "TWD67 格線": gridLayers.TWD67,
@@ -42,6 +60,8 @@ const overlayMaps = {
 
 L.control.layers(baseMaps, overlayMaps).addTo(map);
 
+happyman.addTo(map);
+rudy.addTo(map);
 map.on('overlayadd', updateGrids);
 
 let allTracks = [], trackPoints = [], polyline, hoverMarker, chart, markers = [], wptMarkers = [];
@@ -328,7 +348,7 @@ fullScreenBtn.onAdd = function() {
     return btn;
 };
 
-fullScreenBtn.addTo(map);
+// fullScreenBtn.addTo(map);
 
 // 專門處理「非路徑點」的彈窗
 function showFreeClickPopup(latlng) {
@@ -764,17 +784,33 @@ function setupProgressBar() {
     if (mainCheckbox) mainCheckbox.addEventListener('change', (e) => handleCheckboxChange(e.target.checked));
     if (fsCheckbox) fsCheckbox.addEventListener('change', (e) => handleCheckboxChange(e.target.checked));
 
-    // 更新顯示狀態 (全螢幕偵測)
-    const updateVisibility = () => {
+    window.updateVisibility = () => {
+        const barContainer = document.getElementById("map-control-bar");
+        const mapDiv = document.getElementById('map');
+        if (!barContainer || !mapDiv) return;
+
         const isFS = !!(document.fullscreenElement || document.webkitFullscreenElement);
         const isIphoneFS = document.body.classList.contains('iphone-fullscreen');
         
-        if ((isFS || isIphoneFS) && typeof trackPoints !== 'undefined' && trackPoints.length > 0) {
+        // 判斷高度是否為非標準 (數值判斷最準確)
+        const isResized = mapDiv.offsetHeight > 530; 
+
+        // 條件：必須有航跡 且 (全螢幕 或 地圖調整大小)
+        const hasTracks = (typeof trackPoints !== 'undefined' && trackPoints && trackPoints.length > 0);
+        
+        if (hasTracks && (isFS || isIphoneFS || isResized)) {
             barContainer.style.setProperty('display', 'flex', 'important');
+            
+            // 將位置再往上一點 (從 45px 調到 65px)
+            if (!(isFS || isIphoneFS)) {
+                barContainer.style.bottom = '65px'; 
+            } else {
+                barContainer.style.bottom = '100px'; 
+            }
         } else {
             barContainer.style.setProperty('display', 'none');
             map.closePopup(); 
-            if (fsPopupTimer) clearTimeout(fsPopupTimer);
+            if (typeof fsPopupTimer !== 'undefined') clearTimeout(fsPopupTimer);
         }
     };
 
@@ -2916,3 +2952,108 @@ document.addEventListener('fullscreenchange', () => {
         if (typeof setupProgressBar === 'function') setupProgressBar();
     }, 150);
 });
+
+// --- 1. 定義全域切換函式 ---
+window.changeMapSize = function(size) {
+    // 切換回標準或中大圖時，若在全螢幕則先退出
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+        if (document.exitFullscreen) document.exitFullscreen();
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    }
+    document.getElementById('map').classList.remove('iphone-fullscreen');
+    document.body.style.overflow = '';
+
+    const mapDiv = document.getElementById('map');
+    const heights = { 'standard': '520px', 'medium': '60vh', 'large': '85vh' };
+    if (!heights[size]) return;
+
+    mapDiv.style.height = heights[size];
+
+    setTimeout(() => {
+        map.invalidateSize({ animate: true });
+        map.panBy([0, 0]); // 解決灰色塊問題
+
+        // 主動觸發進度條顯示判斷
+        if (typeof window.updateVisibility === 'function') {
+            window.updateVisibility();
+        }
+
+        if (size === 'large' || size === 'medium') {
+            mapDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }, 400); 
+};
+
+// --- 控制按鈕組 (左上角) ---
+const mapSizeCtrl = L.control({ position: 'topleft' });
+
+mapSizeCtrl.onAdd = function() {
+    const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+    container.style.backgroundColor = 'white';
+    container.style.display = 'flex';
+    container.style.alignItems = 'center';
+    container.style.border = '1px solid #ccc';
+
+    const mainBtn = L.DomUtil.create('div', '', container);
+    mainBtn.innerHTML = '⛶';
+    mainBtn.style.width = '30px';
+    mainBtn.style.height = '30px';
+    mainBtn.style.lineHeight = '30px';
+    mainBtn.style.textAlign = 'center';
+    mainBtn.style.cursor = 'pointer';
+    mainBtn.style.fontSize = '22px';
+    mainBtn.style.fontWeight = 'bold';
+    mainBtn.title = '地圖大小切換';
+
+    const list = L.DomUtil.create('div', '', container);
+    list.style.display = 'none'; 
+    list.style.flexDirection = 'row';
+    list.style.backgroundColor = 'white';
+
+    const options = [
+        { label: '標準', val: 'standard' },
+        { label: '中圖', val: 'medium' },
+        { label: '大圖', val: 'large' },
+        { label: '全螢幕', val: 'full' }
+    ];
+
+    options.forEach((opt) => {
+        const item = L.DomUtil.create('div', '', list);
+        item.innerHTML = opt.label;
+        item.style.padding = '0 12px';
+        item.style.fontSize = '13px';
+        item.style.lineHeight = '30px';
+        item.style.cursor = 'pointer';
+        item.style.borderLeft = '1px solid #eee';
+
+        L.DomEvent.on(item, 'click', function(e) {
+            L.DomEvent.stop(e);
+            if (opt.val === 'full') {
+                // 優先使用全域定義的 toggleFullScreen
+                if (typeof window.toggleFullScreen === 'function') {
+                    window.toggleFullScreen();
+                } else if (typeof toggleFullScreen === 'function') {
+                    toggleFullScreen();
+                } else {
+                    // 備用方案：直接對 map 元件下指令
+                    const mapEl = document.getElementById('map');
+                    if (mapEl.requestFullscreen) mapEl.requestFullscreen();
+                }
+            } else {
+                window.changeMapSize(opt.val);
+            }
+            list.style.display = 'none'; 
+        });
+    });
+
+    L.DomEvent.on(mainBtn, 'click', function(e) {
+        L.DomEvent.stop(e);
+        const isHidden = list.style.display === 'none';
+        list.style.display = isHidden ? 'flex' : 'none';
+    });
+
+    L.DomEvent.disableClickPropagation(container);
+    return container;
+};
+
+mapSizeCtrl.addTo(map);
