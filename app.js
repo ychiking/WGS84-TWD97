@@ -3269,29 +3269,61 @@ function showGpxManagementModal() {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'gpxManageModal';
-        modal.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; display:flex; align-items:center; justify-content:center;";
+        modal.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; display:flex; align-items:center; justify-content:center; backdrop-filter: blur(2px);";
         document.body.appendChild(modal);
     }
     modal.style.display = 'flex';
 
+    const defaultColors = ['#0000FF', '#FF3300', '#FF00FF', '#FFD600', '#9C27B0', '#33FF00', '#00FFFF', '#E91E63', '#1A73E8', '#00E676', '#FF8C00', '#BF00FF', '#A5F2F3', '#FFF000', '#87CEFA', '#FF1493'];
+
     let listHtml = `
-        <div style="background:white; padding:20px; border-radius:12px; width:300px; box-shadow: 0 8px 24px rgba(0,0,0,0.2);">
-            <h3 style="margin-top:0; font-size:18px; border-bottom:1px solid #eee; padding-bottom:12px; color:#333;">管理匯入軌跡</h3>
-            <div style="max-height:300px; overflow-y:auto; margin: 10px 0;">`;
+        <div style="background:white; padding:20px; border-radius:12px; width:300px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); max-height: 80vh; display: flex; flex-direction: column;">
+            <h3 style="margin:0 0 15px 0; font-size:18px; border-bottom:1px solid #eee; padding-bottom:10px;">管理軌跡</h3>
+            <div style="flex: 1; overflow-y:auto; padding-right:5px;">`;
     
     multiGpxStack.forEach((gpx, i) => {
         const isChecked = gpx.visible !== false ? 'checked' : '';
+        // 【核心邏輯】判斷是否為當前 Focus 的軌跡
+        const isFocused = (window.currentMultiIndex === i);
+        
         listHtml += `
-            <div style="margin: 14px 0; display:flex; align-items:center; gap:12px;">
-                <input type="checkbox" id="gpx-chk-${i}" ${isChecked} onchange="toggleGpx(${i})" style="width:20px; height:20px; cursor:pointer;">
-                <label for="gpx-chk-${i}" style="font-size:15px; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; color:#444;">${gpx.name}</label>
+            <div style="margin-bottom: 10px; border: 1px solid ${isFocused ? '#1a73e8' : '#eee'}; border-radius: 8px; padding: 10px; background: ${isFocused ? '#f0f7ff' : '#fafafa'};">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <input type="checkbox" id="gpx-chk-${i}" ${isChecked} ${isFocused ? 'disabled' : ''} onchange="toggleGpx(${i})" 
+                        style="width:18px; height:18px; cursor: ${isFocused ? 'not-allowed' : 'pointer'};">
+                    
+                    <div onclick="toggleColorPicker(${i})" style="
+                        width: 22px; height: 22px; background: ${gpx.color}; 
+                        border-radius: 50%; cursor: pointer; border: 2px solid white; box-shadow: 0 0 0 1px #ddd;
+                        flex-shrink: 0;
+                    "></div>
+
+                    <label for="gpx-chk-${i}" style="font-size:14px; font-weight:500; cursor:${isFocused ? 'default' : 'pointer'}; color:${isFocused ? '#1a73e8' : '#333'}; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                        ${gpx.name} ${isFocused ? '<span style="font-size:11px; margin-left:5px; background:#1a73e8; color:white; padding:1px 4px; border-radius:3px;">使用中</span>' : ''}
+                    </label>
+                </div>
+                
+                <div id="picker-${i}" style="display: none; margin-top: 12px; padding: 8px; background: white; border-radius: 6px; border: 1px solid #ddd; gap: 6px; flex-wrap: wrap; justify-content: center;">
+                    ${defaultColors.map(color => {
+                        const isSelected = gpx.color.toUpperCase() === color.toUpperCase();
+                        return `
+                            <div onclick="changeGpxColor(${i}, '${color}')" style="
+                                width: 24px; height: 24px; background: ${color}; 
+                                border-radius: 4px; cursor: pointer; position: relative;
+                                border: ${isSelected ? '2px solid #333' : '1px solid rgba(0,0,0,0.1)'};
+                            ">
+                                ${isSelected ? '<div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:6px; height:6px; background:white; border-radius:50%;"></div>' : ''}
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
             </div>`;
     });
 
     listHtml += `</div>
             <button onclick="document.getElementById('gpxManageModal').style.display='none'" 
-                style="width:100%; margin-top:15px; padding:12px; background:#1a73e8; color:white; border:none; border-radius:6px; cursor:pointer; font-size:16px; font-weight:500; transition: background 0.2s;">
-                關閉
+                style="width:100%; margin-top:15px; padding:12px; background:#1a73e8; color:white; border:none; border-radius:8px; cursor:pointer; font-size:16px; font-weight:bold;">
+                完成
             </button>
         </div>`;
     modal.innerHTML = listHtml;
@@ -3305,25 +3337,82 @@ window.toggleGpx = function(index) {
     if (item.visible === undefined) item.visible = true;
     item.visible = !item.visible;
 
-    // 2. 【核心修正】立即同步地圖圖層
+    // 2. 立即處理地圖上的原始圖層
     if (item.layer) {
         if (item.visible) {
-            // 如果勾選，確保它在畫面上
-            if (!map.hasLayer(item.layer)) {
-                map.addLayer(item.layer);
-            }
+            if (!map.hasLayer(item.layer)) map.addLayer(item.layer);
         } else {
-            // 如果取消勾選，強制從地圖移除
             map.removeLayer(item.layer);
-            
-            // 如果目前正在看這一條軌跡，卻把它關閉了，建議清除高度表與 HoverMarker
-            if (window.currentMultiIndex === index) {
-                if (window.hoverMarker) map.removeLayer(window.hoverMarker);
-                // 這裡可以視需求決定是否要自動 switch 到下一條可見的軌跡
-            }
         }
     }
 
-    // 3. 重新渲染下方 Bar (這會讓按鈕消失)
+    // 3. 【關鍵修正】如果是目前的 Focus 軌跡被取消勾選，必須清除最上層 activeRouteLayer
+    if (!item.visible && window.currentMultiIndex === index) {
+        if (window.activeRouteLayer) {
+            map.removeLayer(window.activeRouteLayer);
+            window.activeRouteLayer = null;
+        }
+        if (window.hoverMarker) map.removeLayer(window.hoverMarker);
+        
+        // 隱藏高度表與相關資訊
+        const chartContainer = document.getElementById("chartContainer");
+        if (chartContainer) chartContainer.style.display = "none";
+        const wptList = document.getElementById("wptList");
+        if (wptList) wptList.style.display = "none";
+    }
+
+    // 4. 重新渲染管理視窗與下方 Bar (這會讓按鈕消失)
+    showGpxManagementModal();
     renderMultiGpxButtons();
+};
+
+window.changeGpxColor = function(index, newColor) {
+    const item = multiGpxStack[index];
+    if (!item) return;
+
+    item.color = newColor;
+
+    // 1. 更新底層圖層顏色 (前提是它目前應該在地圖上)
+    if (item.layer && item.visible !== false) {
+        const isCurrent = (window.currentMultiIndex === index);
+        item.layer.setStyle({
+            color: newColor,
+            opacity: isCurrent ? 1.0 : 0.5,
+            weight: isCurrent ? 8 : 4
+        });
+    }
+
+    // 2. 如果是正在 Focus 的軌跡，且「它是顯示狀態」，才執行重繪
+    if (window.currentMultiIndex === index && item.visible !== false) {
+        if (window.activeRouteLayer) {
+            map.removeLayer(window.activeRouteLayer);
+        }
+        window.currentTrackColor = newColor;
+        
+        // 強制重繪
+        setTimeout(() => {
+            switchMultiGpx(index); 
+        }, 10);
+    }
+
+    // 3. 刷新 UI
+    showGpxManagementModal();
+    renderMultiGpxButtons();
+};
+
+window.toggleColorPicker = function(i) {
+    // 取得當前點擊的選單
+    const targetPicker = document.getElementById(`picker-${i}`);
+    const isCurrentlyHidden = (targetPicker.style.display === 'none');
+
+    // 關閉所有人的選單
+    multiGpxStack.forEach((_, idx) => {
+        const p = document.getElementById(`picker-${idx}`);
+        if (p) p.style.display = 'none';
+    });
+
+    // 如果剛才是關掉的，現在就打開它
+    if (isCurrentlyHidden) {
+        targetPicker.style.display = 'flex';
+    }
 };
