@@ -64,37 +64,6 @@ L.control.layers(baseMaps, overlayMaps).addTo(map);
 rudy.addTo(map);
 map.on('overlayadd', updateGrids);
 
-// 建立一個 Leaflet 控制項放置於右側
-const trackControl = L.control({ position: 'topright' });
-
-trackControl.onAdd = function() {
-    const container = L.DomUtil.create('div', 'leaflet-bar track-control-container');
-    container.style.backgroundColor = 'white';
-    container.style.cursor = 'pointer';
-    container.style.display = 'none'; // 初始隱藏，匯入檔案後顯示
-    container.id = 'trackManagerBtn';
-
-    container.innerHTML = `
-        <a title="管理軌跡顯示" style="width:45px; height:45px; display:flex; align-items:center; justify-content:center;">
-            <span class="material-icons" style="font-size:30px; color:#666;">layers</span>
-        </a>
-        <div id="trackListPanel">
-            <div style="font-weight:bold; margin-bottom:8px; border-bottom:1px solid #ddd; padding-bottom:4px; font-size:14px; color:#333;">匯入清單管理</div>
-            <div id="trackListContent"></div>
-        </div>
-    `;
-
-    // 防止點擊面板時地圖跟著動
-    L.DomEvent.disableClickPropagation(container);
-    
-    // Hover 顯示/隱藏邏輯
-    container.onmouseenter = () => { document.getElementById('trackListPanel').style.display = 'block'; };
-    container.onmouseleave = () => { document.getElementById('trackListPanel').style.display = 'none'; };
-
-    return container;
-};
-trackControl.addTo(map);
-
 let allTracks = [], trackPoints = [], polyline, hoverMarker, chart, markers = [], wptMarkers = [];
 let pointA = null, pointB = null, markerA = null, markerB = null;
 let currentPopup = null; 
@@ -2807,41 +2776,43 @@ function switchMultiGpx(index) {
 
 function renderMultiGpxButtons() {
     const bar = document.getElementById('multiGpxBtnBar');
-    if (!bar) return;
+    if (!bar || !gpxManagerControlContainer) return;
 
-    let panelContent = document.getElementById('trackListContent');
-    const managerBtn = document.getElementById('trackManagerBtn');
-    const panel = document.getElementById('trackListPanel');
-    
-		const defaultColors = [
-        '#0000FF', '#FF3300', '#FF00FF', '#FFD600', 
-        '#9C27B0', '#33FF00', '#00FFFF', '#E91E63', 
-        '#1A73E8', '#00E676', '#FF8C00', '#BF00FF',
-        '#A5F2F3', '#FFF000', '#87CEFA', '#FF1493', 
-		];
-
+    // --- 1. 右側管理按鈕：使用 layers 圖示 (菱形 + 倒V) ---
     if (multiGpxStack && multiGpxStack.length > 0) {
         document.body.classList.add('has-gpx-bar');
-        if (managerBtn) managerBtn.style.display = 'block';
+        gpxManagerControlContainer.style.display = 'block';
+        
+        // 使用 layers 圖示，這就是您描述的那個形狀
+        gpxManagerControlContainer.innerHTML = `
+            <a href="#" title="管理 GPX 顯示" style="
+                background-color: white; 
+                width: 45px; 
+                height: 45px; 
+                display: flex; 
+                align-items: center; 
+                justify-content: center; 
+                text-decoration: none; 
+                color: #333;
+            ">
+                <span class="material-icons" style="font-size: 30px;">layers</span>
+            </a>
+        `;
+
+        L.DomEvent.off(gpxManagerControlContainer, 'click');
+        L.DomEvent.on(gpxManagerControlContainer, 'click', (e) => {
+            L.DomEvent.stop(e);
+            showGpxManagementModal(); // 顯示管理選單
+        });
     } else {
         document.body.classList.remove('has-gpx-bar');
-        if (managerBtn) managerBtn.style.display = 'none';
-        if (panel) panel.style.display = 'none';
+        gpxManagerControlContainer.style.display = 'none';
     }
 
-    if (managerBtn && panel) {
-        managerBtn.onclick = (e) => {
-            if (e) L.DomEvent.stopPropagation(e);
-            const isHidden = (panel.style.display === 'none' || panel.style.display === '');
-            panel.style.display = isHidden ? 'block' : 'none';
-        };
-        L.DomEvent.disableClickPropagation(panel);
-        L.DomEvent.disableScrollPropagation(panel);
-    }
-
+    // --- 2. 下方 GPX Bar：處理勾選連動 ---
     bar.innerHTML = ''; 
-    if (panelContent) panelContent.innerHTML = '';
     
+    // (原本的關閉按鈕邏輯)
     const closeBtn = document.createElement('button');
     closeBtn.className = 'gpx-file-btn close-btn';
     closeBtn.innerHTML = '✕ 關閉檔案';
@@ -2853,159 +2824,32 @@ function renderMultiGpxButtons() {
     bar.appendChild(closeBtn);
     
     multiGpxStack.forEach((gpx, i) => {
-        if (gpx.isVisible === undefined) gpx.isVisible = true;
-
-        if (gpx.isVisible) {
-            const btn = document.createElement('button');
-            btn.className = 'gpx-file-btn';
-            btn.id = `multi-btn-${i}`;
-            if (window.currentMultiIndex === i) btn.classList.add('active');
-            btn.textContent = gpx.name.length > 40 ? gpx.name.substring(0, 40) + "..." : gpx.name;
-            btn.style.borderLeft = `5px solid ${gpx.color}`;
-            btn.style.setProperty('--track-color', gpx.color);
-            btn.onclick = (e) => {
-                if (e) L.DomEvent.stopPropagation(e);
-                switchMultiGpx(i);
-            };
-            bar.appendChild(btn);
+        // 【核心邏輯】如果 visible 為 false (在 Modal 中被取消勾選)，則不顯示按鈕
+        if (gpx.visible === false) {
+            if (gpx.layerGroup) map.removeLayer(gpx.layerGroup); // 同步移除地圖線條
+            return; 
         }
 
-        if (panelContent) {
-            const item = document.createElement('div');
-            item.style = "display:flex; align-items:center; padding:8px 0; border-bottom:1px solid #eee; font-size:13px; position:relative;";
-            
-            // 勾選框：控制顯示/隱藏
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.checked = gpx.isVisible;
-            checkbox.style.marginRight = '8px';
-            checkbox.onchange = (e) => {
-                gpx.isVisible = checkbox.checked;
-                if (gpx.isVisible) {
-                    gpx.layer.addTo(map);
-                } else {
-                    map.removeLayer(gpx.layer);
-                    // 如果隱藏的是當前 Focus 的軌跡，自動切換到下一個可見軌跡
-                    if (window.currentMultiIndex === i) {
-                        const firstVisible = multiGpxStack.findIndex(g => g.isVisible);
-                        if (firstVisible !== -1) switchMultiGpx(firstVisible);
-                    }
-                }
-                renderMultiGpxButtons();
-            };
-
-            const colorDot = document.createElement('div');
-            colorDot.id = `color-dot-${i}`;
-            colorDot.style = `width:14px; height:14px; border-radius:50%; background-color:${gpx.color}; border:1px solid #ddd; margin-right:8px; cursor:pointer; flex-shrink:0;`;
-            
-            const nameSpan = document.createElement('span');
-            nameSpan.style = "flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#333;";
-            nameSpan.textContent = gpx.name;
-
-            // --- 顏色選擇彈窗 (僅限清單) ---
-            colorDot.onclick = (e) => {
-                if (e) L.DomEvent.stopPropagation(e);
-                
-                const oldPicker = document.getElementById('temp-color-picker');
-                if (oldPicker) oldPicker.remove();
-
-                const picker = document.createElement('div');
-                picker.id = 'temp-color-picker';
-                picker.style = "position:absolute; top:25px; left:0; background:white; border:1px solid #ccc; padding:12px; border-radius:8px; z-index:10000; box-shadow:0 4px 20px rgba(0,0,0,0.3); width:160px;";
-                
-                L.DomEvent.disableClickPropagation(picker);
-
-                let selectedTempColor = gpx.color;
-
-                const grid = document.createElement('div');
-                grid.style = "display:grid; grid-template-columns: repeat(4, 1fr); gap:8px; margin-bottom:12px;";
-                
-                defaultColors.forEach(c => {
-                    const cBtn = document.createElement('div');
-                    cBtn.className = 'color-option-ball';
-                    cBtn.style = `width:24px; height:24px; background:${c}; border-radius:50%; cursor:pointer; border:2px solid transparent; transition:0.2s;`;
-                    
-                    if (c.toLowerCase() === gpx.color.toLowerCase()) {
-                        cBtn.style.borderColor = "#fff"; cBtn.style.boxShadow = "0 0 0 2px #1a73e8";
-                    }
-
-                    cBtn.onclick = (ev) => {
-                        ev.stopPropagation();
-                        selectedTempColor = c;
-                        picker.querySelectorAll('.color-option-ball').forEach(el => {
-                            el.style.borderColor = "transparent"; el.style.boxShadow = "none";
-                        });
-                        cBtn.style.borderColor = "#fff"; cBtn.style.boxShadow = "0 0 0 2px #1a73e8";
-                    };
-                    grid.appendChild(cBtn);
-                });
-                picker.appendChild(grid);
-
-                const actionRow = document.createElement('div');
-                actionRow.style = "display:flex; gap:8px;";
-
-                const cancelBtn = document.createElement('button');
-                cancelBtn.textContent = "取消";
-                cancelBtn.style = "flex:1; padding:6px; background:#f1f3f4; color:#3c4043; border:1px solid #dadce0; border-radius:4px; cursor:pointer; font-size:12px;";
-                cancelBtn.onclick = (ev) => {
-                    ev.stopPropagation();
-                    picker.remove();
-                };
-
-                const confirmBtn = document.createElement('button');
-                confirmBtn.textContent = "套用";
-                confirmBtn.style = "flex:1; padding:6px; background:#1a73e8; color:white; border:none; border-radius:4px; cursor:pointer; font-size:12px; font-weight:bold;";
-                confirmBtn.onclick = (ev) => {
-                    ev.stopPropagation();
-                    applyFinalColor(i, selectedTempColor);
-                    picker.remove();
-                };
-
-                actionRow.appendChild(cancelBtn);
-                actionRow.appendChild(confirmBtn);
-                picker.appendChild(actionRow);
-                item.appendChild(picker);
-            };
-
-            item.appendChild(checkbox);
-            item.appendChild(colorDot);
-            item.appendChild(nameSpan);
-            panelContent.appendChild(item);
+        // 確保顯示中的檔案在地圖上
+        if (gpx.layerGroup && !map.hasLayer(gpx.layerGroup)) {
+            map.addLayer(gpx.layerGroup);
         }
+
+        const btn = document.createElement('button');
+        btn.className = 'gpx-file-btn';
+        btn.id = `multi-btn-${i}`;
+        btn.textContent = gpx.name.length > 40 ? gpx.name.substring(0, 40) + "..." : gpx.name;
+        btn.style.borderLeft = `5px solid ${gpx.color}`;
+        btn.style.setProperty('--track-color', gpx.color);
+        
+        btn.onclick = (e) => {
+            if (e) L.DomEvent.stopPropagation(e);
+            switchMultiGpx(i);
+        };
+        bar.appendChild(btn);
     });
 
-    function applyFinalColor(index, color) {
-        const gpx = multiGpxStack[index];
-        gpx.color = color;
-
-        // 1. 更新基礎圖層
-        if (gpx.layer) {
-            gpx.layer.setStyle({ color: color });
-        }
-
-        // 2. 核心修正：如果是 Focus 軌跡，除了改樣式，直接重新執行切換邏輯
-        if (window.currentMultiIndex === index) {
-            // 先同步樣式
-            if (window.polyline) window.polyline.setStyle({ color: color });
-            if (window.activeRouteLayer) window.activeRouteLayer.setStyle({ color: color });
-            
-            // 強制重新載入該軌跡的數據與視圖 (確保高度表同步)
-            switchMultiGpx(index);
-        }
-
-        // 3. 更新 UI
-        const dot = document.getElementById(`color-dot-${index}`);
-        if (dot) dot.style.backgroundColor = color;
-
-        const topBtn = document.getElementById(`multi-btn-${index}`);
-        if (topBtn) {
-            topBtn.style.borderLeft = `5px solid ${color}`;
-            topBtn.style.setProperty('--track-color', color);
-        }
-    }
-
     L.DomEvent.disableClickPropagation(bar);
-    L.DomEvent.disableScrollPropagation(bar);
 }
 
 function clearAllMultiGPX() {
@@ -3401,3 +3245,85 @@ mapSizeCtrl.onAdd = function() {
 };
 
 mapSizeCtrl.addTo(map);
+
+
+let gpxManagerControlContainer; // 全域變數
+
+function initGpxManagerControl() {
+    const GpxManagerControl = L.Control.extend({
+        options: { position: 'topright' }, // 置於右側，會排在樣式按鈕下方
+        onAdd: function() {
+            // 建立容器，並給予 leaflet-bar 類別維持邊框樣式
+            gpxManagerControlContainer = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+            gpxManagerControlContainer.id = 'gpx-manager-control';
+            gpxManagerControlContainer.style.display = 'none'; // 初始隱藏
+            return gpxManagerControlContainer;
+        }
+    });
+    map.addControl(new GpxManagerControl());
+}
+initGpxManagerControl();
+
+function showGpxManagementModal() {
+    let modal = document.getElementById('gpxManageModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'gpxManageModal';
+        modal.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; display:flex; align-items:center; justify-content:center;";
+        document.body.appendChild(modal);
+    }
+    modal.style.display = 'flex';
+
+    let listHtml = `
+        <div style="background:white; padding:20px; border-radius:12px; width:300px; box-shadow: 0 8px 24px rgba(0,0,0,0.2);">
+            <h3 style="margin-top:0; font-size:18px; border-bottom:1px solid #eee; padding-bottom:12px; color:#333;">管理匯入軌跡</h3>
+            <div style="max-height:300px; overflow-y:auto; margin: 10px 0;">`;
+    
+    multiGpxStack.forEach((gpx, i) => {
+        const isChecked = gpx.visible !== false ? 'checked' : '';
+        listHtml += `
+            <div style="margin: 14px 0; display:flex; align-items:center; gap:12px;">
+                <input type="checkbox" id="gpx-chk-${i}" ${isChecked} onchange="toggleGpx(${i})" style="width:20px; height:20px; cursor:pointer;">
+                <label for="gpx-chk-${i}" style="font-size:15px; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; color:#444;">${gpx.name}</label>
+            </div>`;
+    });
+
+    listHtml += `</div>
+            <button onclick="document.getElementById('gpxManageModal').style.display='none'" 
+                style="width:100%; margin-top:15px; padding:12px; background:#1a73e8; color:white; border:none; border-radius:6px; cursor:pointer; font-size:16px; font-weight:500; transition: background 0.2s;">
+                關閉
+            </button>
+        </div>`;
+    modal.innerHTML = listHtml;
+}
+
+window.toggleGpx = function(index) {
+    const item = multiGpxStack[index];
+    if (!item) return;
+
+    // 1. 切換顯示狀態
+    if (item.visible === undefined) item.visible = true;
+    item.visible = !item.visible;
+
+    // 2. 【核心修正】立即同步地圖圖層
+    if (item.layer) {
+        if (item.visible) {
+            // 如果勾選，確保它在畫面上
+            if (!map.hasLayer(item.layer)) {
+                map.addLayer(item.layer);
+            }
+        } else {
+            // 如果取消勾選，強制從地圖移除
+            map.removeLayer(item.layer);
+            
+            // 如果目前正在看這一條軌跡，卻把它關閉了，建議清除高度表與 HoverMarker
+            if (window.currentMultiIndex === index) {
+                if (window.hoverMarker) map.removeLayer(window.hoverMarker);
+                // 這裡可以視需求決定是否要自動 switch 到下一條可見的軌跡
+            }
+        }
+    }
+
+    // 3. 重新渲染下方 Bar (這會讓按鈕消失)
+    renderMultiGpxButtons();
+};
