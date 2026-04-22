@@ -1039,11 +1039,24 @@ function loadRoute(index, customColor = null) {
                 }
 
                 // --- C. 地圖指示點與彈窗 (您的原始邏輯) ---
-                if (!hoverMarker) {
-                    hoverMarker = L.circleMarker([0,0], {radius: 7, color: 'yellow', fillOpacity: 1}).addTo(map);
-                }
+									if (!hoverMarker) {
+									    // 將 yellow 換成小藍點樣式：藍色填充 + 白色粗外框
+									    hoverMarker = L.circleMarker([0,0], {
+									        radius: 7, 
+									        color: '#ffffff',     // 外框換成白色
+									        weight: 2,            // 外框粗細
+									        fillColor: '#1a73e8', // 填充換成 Google Blue
+									        fillOpacity: 1
+									    }).addTo(map);
+									    } else {
+									    // 2. 關鍵：如果標記已經存在，但目前不在地圖上，強制加回去
+									    if (!map.hasLayer(hoverMarker)) {
+									        hoverMarker.addTo(map);
+									    }
+								
+									}
                 hoverMarker.setLatLng([trackPoints[idx].lat, trackPoints[idx].lon]).bringToFront();
-                
+                hoverMarker.bringToFront();
                 // 呼叫您定義的彈窗函式
                 if (typeof showCustomPopup === 'function') {
                     showCustomPopup(idx, "位置資訊");
@@ -1154,42 +1167,32 @@ const CombinedControl = L.Control.extend({
             return btn;
         };
 
-        // 座標轉換
         const coordBtn = createBtn('🌐', '座標轉換', true);
 
-        // 定位按鈕 
-		const btnSize = "30px";       // 按鈕方框大小
-        const arrowIconSize = "20px"; // 箭頭圖案大小
-        const arrowColor = "#1a73e8"; // 箭頭顏色
+        const btnSize = "30px";
+        const arrowIconSize = "20px";
+        const arrowColor = "#1a73e8";
         const locArrowAngle = "315deg"
-        // ------------------------------------------
 
         const locBtn = L.DomUtil.create('a', '', container);
         locBtn.title = "目前位置定位";
         locBtn.style.cssText = `width:${btnSize}; height:${btnSize}; background:white; cursor:pointer; display:flex; align-items:center; justify-content:center; border-bottom:1px solid #ccc;`;
         
-        // 使用 SVG 繪製按鈕內的箭頭圖示
         locBtn.innerHTML = `
             <svg width="${arrowIconSize}" height="${arrowIconSize}" viewBox="0 0 100 100" style="display:block; transform: rotate(${locArrowAngle})">
                 <path d="M50 5 L90 90 L50 70 L10 90 Z" fill="${arrowColor}" />
             </svg>
         `;
 
-        // 指北針按鈕
         const compassBtn = createBtn('🧭', '顯示/隱藏指北針', false);
 
         L.DomEvent.disableClickPropagation(container);
         
-/// 座標定位按鈕點擊事件
         L.DomEvent.on(coordBtn, 'click', (e) => { 
             L.DomEvent.stop(e); 
             
-            
-            // 1. 清除地圖上的定位點邏輯 (維持不變)
-            if (hoverMarker) {
-                map.removeLayer(hoverMarker);
-                hoverMarker = null; 
-            }
+            // --- 關鍵修正：不再 removeLayer(hoverMarker) 也不再設為 null ---
+            // 這樣小藍點就會一直留在地圖上
 
             map.eachLayer((layer) => {
                 if (layer instanceof L.Marker || layer instanceof L.CircleMarker) {
@@ -1202,29 +1205,26 @@ const CombinedControl = L.Control.extend({
                 }
             });
 
-            // --- 關鍵修正：確保 Modal 在全螢幕下可見 ---
             const modal = document.getElementById('coordModal');
             const mapContainer = document.getElementById('map');
             
-            // 如果 Modal 不在地圖容器內，就把它搬進去
+            if (!modal) return;
+
             if (modal.parentNode !== mapContainer) {
                 mapContainer.appendChild(modal);
             }
             
-						L.DomEvent.disableClickPropagation(modal);
+            L.DomEvent.disableClickPropagation(modal);
 
-            // 強制設定 Modal 的層級與定位，確保它在全螢幕最上層
-            modal.style.zIndex = "2147483647"; // 使用最大值
+            modal.style.zIndex = "2147483647"; 
             modal.style.position = "absolute";
             modal.style.display = 'flex'; 
-            // ------------------------------------------
 
-            // 在 input 標籤中加入 onkeydown="if(event.keyCode==13) executeJump('...')"
-modal.innerHTML = `
+            modal.innerHTML = `
     <div id="jump-container" style="background:white; padding:12px 15px; border-radius:12px; width:280px; box-shadow:0 10px 25px rgba(0,0,0,0.5); font-family: sans-serif; font-size:13px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
             <b style="color:#1a73e8;">🌐 座標跳轉定位</b>
-            <span onclick="document.getElementById('coordModal').style.display='none'" style="cursor:pointer; font-size:20px; color:#999;">&times;</span>
+            <span onclick="document.getElementById('coordModal').style.display='none'" style="cursor:pointer; font-size:20px; color:#999;">×</span>
         </div>
 
         <div style="border:1px solid #eee; padding:8px; border-radius:8px; margin-bottom:10px;">
@@ -1275,26 +1275,27 @@ modal.innerHTML = `
         </div>
     </div>
 `;
+            // 修正 1：確保小藍點在 z-index 最上層，且地圖重新整理顯示
+            if (typeof hoverMarker !== 'undefined' && hoverMarker) {
+                hoverMarker.bringToFront();
+            }
+            map.invalidateSize();
 
-// 輔助 UI 切換函式
-window.toggleWgsInput = function() {
-    const type = document.getElementById('wgs_type').value;
-    document.getElementById('wgs_dd_input').style.display = (type === 'DD') ? 'flex' : 'none';
-    document.getElementById('wgs_dms_input').style.display = (type === 'DMS') ? 'flex' : 'none';
-};
-
-            // 自動聚焦
-            setTimeout(() => document.getElementById('jump_wgs').focus(), 100);
+            setTimeout(() => {
+                const focusEl = document.getElementById('lat_dd');
+                if(focusEl) focusEl.focus();
+            }, 100);
         });
 
         L.DomEvent.on(locBtn, 'click', (e) => { 
             L.DomEvent.stop(e); 
-            window.toggleGPS(locBtn); // 呼叫下方新增的切換函式
+            window.toggleGPS(locBtn);
         });
 
         L.DomEvent.on(compassBtn, 'click', (e) => { 
             L.DomEvent.stop(e); 
-            document.getElementById("mapCompass").classList.toggle("show"); 
+            const compass = document.getElementById("mapCompass");
+            if(compass) compass.classList.toggle("show"); 
         });
         
         return container;
@@ -2436,6 +2437,7 @@ window.jumpToLocation = function(lat, lon) {
     `;
 
     document.getElementById('coordModal').style.display = 'none';
+    
     map.setView([lat, lon], 16); 
     
     const jumpMarker = L.marker([lat, lon]).addTo(map);
@@ -3019,9 +3021,8 @@ document.addEventListener('fullscreenchange', () => {
 // --- 1. 定義全域切換函式 ---
 window.changeMapSize = function(size) {
     const mapDiv = document.getElementById('map');
-    window.currentMapSize = size; // 紀錄當前狀態
+    window.currentMapSize = size; 
 
-    // 1. 退出全螢幕狀態邏輯
     if (document.fullscreenElement || document.webkitFullscreenElement) {
         if (document.exitFullscreen) document.exitFullscreen();
         else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
@@ -3030,13 +3031,9 @@ window.changeMapSize = function(size) {
     mapDiv.classList.remove('iphone-fullscreen');
     document.body.style.overflow = '';
 
-    // 2. 重新定義高度：將原本的中圖(65vh)給標準
     const isMobile = window.innerWidth <= 768;
-    const isLandscape = window.innerWidth > window.innerHeight && window.innerHeight < 500;
-    
     let heightVal;
     if (size === 'standard') {
-        // 標準現在使用原本中圖的比例
         heightVal = isMobile ? '45vh' : '550px'; 
     } else if (size === 'large') {
         heightVal = '85vh';
@@ -3044,16 +3041,16 @@ window.changeMapSize = function(size) {
 
     if (heightVal) mapDiv.style.height = heightVal;
 
-    // 3. 渲染刷新
     setTimeout(() => {
         map.invalidateSize({ animate: true });
         if (typeof window.updateVisibility === 'function') {
             window.updateVisibility();
         }
-        // 如果切換到大圖，自動捲動到地圖頂端
-        if (size === 'large') {
-            mapDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
+        
+        /* 關鍵修正：移除 size === 'large' 時的 scrollIntoView。
+           這樣地圖就會在原地長大，不會強制把畫面向下推，
+           你上方的「匯入 GPX」按鈕區域會保持可見。
+        */
     }, 400); 
 };
 
