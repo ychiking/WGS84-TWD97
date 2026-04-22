@@ -1,5 +1,5 @@
 // ================= 地圖初始化 =================
-const map = L.map("map", { tap: true, zoomControl: false }).setView([25.03, 121.56], 12);
+const map = L.map("map", { tap: true }).setView([25.03, 121.56], 12);
 const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap" }).addTo(map);
 const otm = L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", { maxZoom: 18, maxNativeZoom: 17, attribution: 'OpenTopoMap' });
 // Happyman（當底圖）
@@ -63,8 +63,6 @@ L.control.layers(baseMaps, overlayMaps).addTo(map);
 //happyman.addTo(map);
 rudy.addTo(map);
 map.on('overlayadd', updateGrids);
-
-
 
 let allTracks = [], trackPoints = [], polyline, hoverMarker, chart, markers = [], wptMarkers = [];
 let pointA = null, pointB = null, markerA = null, markerB = null;
@@ -3065,206 +3063,168 @@ window.addEventListener('resize', () => {
     if (typeof window.updateVisibility === 'function') window.updateVisibility();
 });
 
+window.toggleFullScreen = function() {
+    const mapDiv = document.getElementById('map');
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
-// ================= 地圖尺寸與全螢幕控制邏輯 =================
-
-/// ==========================================
-// 1. 初始化原有的全域變數與防抖鎖
-// ==========================================
-window.currentMapSize = 'standard'; // 追蹤目前是 standard 還是 large
-window.manualShowBar = false; 
-let isProcessing = false; 
-
-// ==========================================
-// 2. 整合你原本的切換邏輯 (確保 iPhone 不會黑屏)
-// ==========================================
-
-// 原有的大小調整函式
-window.changeMapSize = function(size) {
-    const mDiv = document.getElementById('map');
-    window.currentMapSize = size;
-    
-    if (size === 'standard') {
-        mDiv.style.height = '520px'; // 回復你 HTML 預設高度
-    } else if (size === 'large') {
-        mDiv.style.height = '85vh';
+    if (isIOS) {
+        const isFull = mapDiv.classList.contains('iphone-fullscreen');
+        if (!isFull) {
+            mapDiv.classList.add('iphone-fullscreen');
+            document.body.classList.add('iphone-fullscreen'); // 確保 body 也有 class
+            document.body.style.overflow = 'hidden';
+            window.currentMapSize = 'full'; // 強制同步狀態
+        } else {
+            mapDiv.classList.remove('iphone-fullscreen');
+            document.body.classList.remove('iphone-fullscreen');
+            document.body.style.overflow = '';
+            window.currentMapSize = 'standard'; // 退出時預設回歸標準
+        }
+    } else {
+        // Android / PC 邏輯維持...
+        if (!document.fullscreenElement) {
+            if (mapDiv.requestFullscreen) mapDiv.requestFullscreen();
+            window.currentMapSize = 'full';
+        } else {
+            document.exitFullscreen();
+            window.currentMapSize = 'standard';
+        }
     }
     
     setTimeout(() => {
-        if (typeof map !== 'undefined') {
-            map.invalidateSize();
-            // 如果有軌跡，移動時稍微自動校正
-            if (typeof trackLayer !== 'undefined' && trackLayer.getBounds().isValid()) {
-                map.panInsideBounds(trackLayer.getBounds());
-            }
-            if (window.updateVisibility) window.updateVisibility();
-        }
+        map.invalidateSize();
+        if (window.updateVisibility) window.updateVisibility();
     }, 300);
 };
 
-// 原有的全螢幕切換函式 (處理 iPhone 偽全螢幕)
-window.toggleFullScreen = function() {
-    const mDiv = document.getElementById('map');
-    const isIphoneFS = document.body.classList.contains('iphone-fullscreen');
-    const isNativeFS = !!(document.fullscreenElement || document.webkitFullscreenElement);
-    
-    if (isIphoneFS || isNativeFS) {
-        // --- 退出全螢幕 ---
-        document.body.classList.remove('iphone-fullscreen');
-        document.body.style.overflow = '';
-        if (document.exitFullscreen) document.exitFullscreen();
-        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+window.manualShowBar = false; 
+
+const mapSizeCtrl = L.control({ position: 'topleft' });
+
+mapSizeCtrl.onAdd = function() {
+    const container = L.DomUtil.create('div', 'leaflet-control-group');
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.gap = '8px';
+
+    // --- 1. 地圖大小控制組 (外框樣式) ---
+    const sizeWrapper = L.DomUtil.create('div', 'leaflet-bar', container);
+    sizeWrapper.style.backgroundColor = 'white';
+    sizeWrapper.style.display = 'flex';
+    sizeWrapper.style.flexDirection = 'column';
+    sizeWrapper.style.border = '1px solid rgba(0,0,0,0.2)';
+
+    // 用來動態更新按鈕的函式
+    const renderButtons = () => {
+        sizeWrapper.innerHTML = '';
         
-        // 關鍵：退出後回到原本設定的大小 (standard 或 large)
-        window.changeMapSize(window.currentMapSize);
-    } else {
-        // --- 進入全螢幕 ---
-        if (mDiv.requestFullscreen) {
-            mDiv.requestFullscreen();
-        } else if (mDiv.webkitRequestFullscreen) {
-            mDiv.webkitRequestFullscreen();
-        } else {
-            // iPhone 偽全螢幕邏輯
-            document.body.classList.add('iphone-fullscreen');
-            document.body.style.overflow = 'hidden';
-            window.scrollTo(0, 0);
-        }
-        
-        setTimeout(() => {
-            if (map) map.invalidateSize();
-        }, 500);
-    }
-};
+        const isIphoneFS = document.body.classList.contains('iphone-fullscreen') || 
+                           document.getElementById('map').classList.contains('iphone-fullscreen');
+        const isNativeFS = !!(document.fullscreenElement || document.webkitFullscreenElement);
+        const isCurrentlyFull = isIphoneFS || isNativeFS;
+        const currentSize = window.currentMapSize || 'standard';
 
-// ==========================================
-// 3. 整合後的控制項 (包含細線化與防抖)
-// ==========================================
-const ModeSwitchControl = L.Control.extend({
-    options: { position: 'topleft' },
-    onAdd: function(map) {
-        const container = L.DomUtil.create('div', 'leaflet-control-group');
-        container.style.display = 'flex';
-        container.style.flexDirection = 'column';
-        container.style.gap = '8px';
+        // 圖示定義
+        const iconStandard = '<span class="material-icons" style="font-size:20px; transform: rotate(45deg); display: block;">unfold_less</span>';
+        const iconLarge = '<span class="material-icons" style="font-size:20px; transform: rotate(45deg); display: block;">unfold_more</span>';
+        const iconExit = '<span class="material-icons" style="font-size:20px;">fullscreen_exit</span>';
+        const iconFull = '<span class="material-icons" style="font-size:20px;">fullscreen</span>';
 
-        // --- 地圖尺寸切換組 (細線化) ---
-        const sizeBar = L.DomUtil.create('div', 'leaflet-bar custom-map-control', container);
-        sizeBar.style.backgroundColor = 'white';
-        sizeBar.style.border = '1px solid rgba(0,0,0,0.15)'; // 細化外框
-        this._sizeBar = sizeBar;
-
-        // --- 軌跡進度軸開關組 ---
-        const barWrapper = L.DomUtil.create('div', 'leaflet-bar', container);
-        barWrapper.style.backgroundColor = 'white';
-        barWrapper.style.border = '1px solid rgba(0,0,0,0.15)';
-        barWrapper.style.cursor = 'pointer';
-        
-        const barBtn = L.DomUtil.create('a', '', barWrapper);
-        barBtn.style.width = '30px';
-        barBtn.style.height = '30px';
-        barBtn.style.display = 'flex';
-        barBtn.style.alignItems = 'center';
-        barBtn.style.justifyContent = 'center';
-        barBtn.innerHTML = '<span class="material-icons" style="font-size:20px;">linear_scale</span>';
-
-        L.DomEvent.on(barBtn, 'click', (e) => {
-            L.DomEvent.stopPropagation(e);
-            if (isProcessing) return;
-            isProcessing = true;
-            window.manualShowBar = !window.manualShowBar;
-            this.updateBarButtonStyle(barBtn);
-            if (window.updateVisibility) window.updateVisibility();
-            setTimeout(() => { isProcessing = false; }, 400);
-        });
-
-        this._barBtn = barBtn;
-        this.updateBarButtonStyle(barBtn);
-        this.updateButtons();
-        
-        L.DomEvent.disableClickPropagation(container);
-        return container;
-    },
-
-    updateBarButtonStyle: function(btn) {
-        if (window.manualShowBar) {
-            btn.style.color = '#1a73e8';
-            btn.style.backgroundColor = '#e8f0fe';
-        } else {
-            btn.style.color = '#666';
-            btn.style.backgroundColor = 'white';
-        }
-    },
-
-    updateButtons: function() {
-        const container = this._sizeBar;
-        container.innerHTML = '';
-
-        // 判斷當前全螢幕狀態
-        const isFS = document.body.classList.contains('iphone-fullscreen') || 
-                     !!(document.fullscreenElement || document.webkitFullscreenElement);
-
-        const modes = {
-            standard: { label: '標準', icon: 'unfold_less', isSlant: true, action: () => {
-                if (isFS) {
-                    window.toggleFullScreen();
-                    setTimeout(() => window.changeMapSize('standard'), 350);
-                } else {
-                    window.changeMapSize('standard');
-                }
-            }},
-            large: { label: '大圖', icon: isFS ? 'fullscreen_exit' : 'unfold_more', isSlant: !isFS, action: () => {
-                if (isFS) {
-                    window.toggleFullScreen();
-                    setTimeout(() => window.changeMapSize('large'), 350);
-                } else {
-                    window.changeMapSize('large');
-                }
-            }},
-            full: { label: '全螢幕', icon: 'fullscreen', isSlant: false, action: () => window.toggleFullScreen() }
-        };
-
-        // --- 你的過濾邏輯：全螢幕下不顯示「全螢幕」鈕；一般模式下不顯示目前尺寸 ---
         let btnConfigs = [];
-        if (isFS) {
-            btnConfigs = [modes.standard, modes.large];
-        } else {
-            if (window.currentMapSize === 'standard') btnConfigs = [modes.large, modes.full];
-            else btnConfigs = [modes.standard, modes.full];
+
+        // 嚴格執行您的規則 d, e, f
+        if (isCurrentlyFull) {
+            // f. 全螢幕時：放標準、大圖
+            btnConfigs = [
+                { html: iconStandard, val: 'standard', label: '標準' },
+                { html: iconExit, val: 'large', label: '大圖' } // 大圖在全螢幕下顯示退出
+            ];
+        } else if (currentSize === 'standard') {
+            // d. 目前標準：放大圖、全螢幕
+            btnConfigs = [
+                { html: iconLarge, val: 'large', label: '大圖' },
+                { html: iconFull, val: 'full', label: '全螢幕' }
+            ];
+        } else if (currentSize === 'large') {
+            // e. 目前大圖：放標準、全螢幕
+            btnConfigs = [
+                { html: iconStandard, val: 'standard', label: '標準' },
+                { html: iconFull, val: 'full', label: '全螢幕' }
+            ];
         }
 
-        btnConfigs.forEach((config, index) => {
-            const btn = L.DomUtil.create('a', '', container);
-            btn.href = '#';
-            btn.title = config.label;
+        btnConfigs.forEach((cfg, index) => {
+            const btn = L.DomUtil.create('a', '', sizeWrapper);
+            btn.innerHTML = cfg.html;
+            btn.title = cfg.label;
             btn.style.width = '30px';
             btn.style.height = '30px';
+            btn.style.lineHeight = '30px';
+            btn.style.textAlign = 'center';
             btn.style.display = 'flex';
             btn.style.alignItems = 'center';
             btn.style.justifyContent = 'center';
-            if (index === 0) btn.style.borderBottom = '1px solid rgba(0,0,0,0.06)'; // 超細分隔線
+            btn.style.cursor = 'pointer';
+            btn.style.backgroundColor = 'white';
+            if (index === 0) btn.style.borderBottom = '1px solid #eee';
 
-            btn.innerHTML = `<span class="material-icons ${config.isSlant ? 'slant-icon' : ''}" style="font-size:21px; color:#555; opacity:0.85;">${config.icon}</span>`;
-
-            L.DomEvent.on(btn, 'click', (e) => {
-                L.DomEvent.stopPropagation(e);
-                L.DomEvent.preventDefault(e);
-                if (isProcessing) return;
-                isProcessing = true;
-                
-                config.action();
-                
-                setTimeout(() => {
-                    this.updateButtons();
-                    isProcessing = false;
-                }, 300); // 確保動畫跑完才允許下次點擊
+            L.DomEvent.on(btn, 'click', function(e) {
+                L.DomEvent.stop(e);
+                if (cfg.val === 'full') {
+                    window.toggleFullScreen();
+                } else {
+                    if (isCurrentlyFull) {
+                        window.toggleFullScreen();
+                        setTimeout(() => { window.changeMapSize(cfg.val); }, 350);
+                    } else {
+                        window.changeMapSize(cfg.val);
+                    }
+                }
+                // 點擊後延遲重新渲染按鈕，以符合新狀態
+                setTimeout(renderButtons, 500);
             });
         });
+    };
+
+    renderButtons();
+
+    // --- 2. Scroll Bar 開關 (樣式與上面一致) ---
+    const barBtnWrapper = L.DomUtil.create('div', 'leaflet-bar', container);
+    barBtnWrapper.style.backgroundColor = 'white';
+    barBtnWrapper.style.border = '1px solid rgba(0,0,0,0.2)';
+    barBtnWrapper.style.cursor = 'pointer';
+    barBtnWrapper.style.width = '30px';
+    barBtnWrapper.style.height = '30px';
+    barBtnWrapper.title = '顯示/隱藏軌跡進度軸';
+
+    const barToggleBtn = L.DomUtil.create('a', '', barBtnWrapper);
+    barToggleBtn.innerHTML = '<span class="material-icons" style="font-size:20px; display:flex; align-items:center; justify-content:center; height:30px;">linear_scale</span>';
+
+    function refreshBarBtnStyle() {
+        if (window.manualShowBar) {
+            barToggleBtn.style.color = '#1a73e8';
+            barToggleBtn.style.backgroundColor = '#e8f0fe';
+        } else {
+            barToggleBtn.style.color = '#666';
+            barToggleBtn.style.backgroundColor = 'white';
+        }
     }
-});
+    
+    refreshBarBtnStyle();
 
-const modeControl = new ModeSwitchControl();
-modeControl.addTo(map);
+    L.DomEvent.on(barToggleBtn, 'click', function(e) {
+        L.DomEvent.stop(e);
+        window.manualShowBar = !window.manualShowBar;
+        refreshBarBtnStyle();
+        if (window.updateVisibility) window.updateVisibility();
+    });
 
-// 監聽全螢幕變化（當使用者按 ESC 或 系統按鈕退出時）
-document.addEventListener('fullscreenchange', () => modeControl.updateButtons());
-document.addEventListener('webkitfullscreenchange', () => modeControl.updateButtons());
+    // 監聽外部全螢幕變化（例如實體按鍵退出）
+    document.addEventListener('fullscreenchange', renderButtons);
+    document.addEventListener('webkitfullscreenchange', renderButtons);
+
+    L.DomEvent.disableClickPropagation(container);
+    return container;
+};
+
+mapSizeCtrl.addTo(map);
