@@ -2689,7 +2689,7 @@ function switchMultiGpx(index) {
     map.closePopup();
     window.currentFileNameForDisplay = data.name;
 
-    // --- (處理按鈕樣式與圖層顏色樣式的邏輯不變) ---
+    // 1. 處理 UI 樣式 (按鈕高亮與地圖淡化)
     multiGpxStack.forEach((item, i) => {
         const btn = document.getElementById(`multi-btn-${i}`);
         if (i === index) {
@@ -2707,37 +2707,55 @@ function switchMultiGpx(index) {
         }
     });
 
-    // 🔴 核心修正點：
-    // 不要用 parseGPX(data.content)，因為 content 是原始 XML 字串。
-    // 直接將記憶體中「活的」資料餵給全域變數並呼叫渲染。
-    
-    // 同步當前軌跡資料
-    allTracks = [{ 
-        name: data.name, 
-        points: data.points, 
-        waypoints: data.waypoints // 這裡會包含你剛新增/修改的點
-    }];
-    trackPoints = data.points; 
+    // 2. 🔴 核心：載入資料並恢復航點
+    if (data.content) {
+        // 方案 A: 含有原始 XML (支援一檔多線)
+        const pureFileName = data.name.replace(/\.[^/.]+$/, "");
+        
+        // 執行解析 (這會重建 allTracks 陣列)
+        parseGPX(data.content, pureFileName);
+        
+        // ✅ 關鍵同步：將存在 multiGpxStack 裡最新的航點資料，塞入剛剛解析出的 allTracks[0]
+        if (allTracks && allTracks.length > 0) {
+            allTracks[0].waypoints = data.waypoints || []; 
+        }
 
-    // 執行載入與渲染
-    if (typeof loadRoute === 'function') {
-        loadRoute(0); // loadRoute 內部會呼叫 renderRouteInfo 繼而呼叫 renderWaypointsAndPeaks
+        // 呼叫載入 (通常 index 0 為結合軌跡，能保留原功能)
+        setTimeout(() => {
+            if (typeof loadRoute === 'function') loadRoute(0);
+            if (window.activeRouteLayer) activeRouteLayer.setStyle({ color: data.color });
+        }, 100);
+
+    } else {
+        // 方案 B: 手動新增的軌跡
+        allTracks = [{ 
+            name: data.name, 
+            points: data.points, 
+            waypoints: data.waypoints 
+        }];
+        trackPoints = data.points; 
+        if (typeof loadRoute === 'function') loadRoute(0);
     }
 
-    // 確保顏色正確套用
-    setTimeout(() => {
-        if (window.activeRouteLayer) {
-            window.activeRouteLayer.setStyle({ color: data.color });
-        }
-    }, 50); 
-
-    // --- (後續管理 UI 邏輯不變) ---
+    // 3. UI 輔助功能開啟
     const toggleBtn = document.getElementById("toggleChartBtn");
     if (toggleBtn) {
         toggleBtn.style.display = "block"; 
         toggleBtn.textContent = "收合高度表"; 
     }
     document.getElementById("chartContainer").style.display = "block";
+    document.getElementById("wptList").style.display = "block";
+
+    if (typeof detectPeaksAlongRoute === 'function') {
+        if (typeof peakAbortController !== 'undefined' && peakAbortController) {
+            peakAbortController.abort();
+        }
+        detectPeaksAlongRoute(false); 
+    }
+    
+    if (typeof hoverMarker !== 'undefined' && hoverMarker) { 
+        hoverMarker.bringToFront(); 
+    }
 }
 
 function renderMultiGpxButtons() {
