@@ -910,28 +910,18 @@ function loadRoute(index, customColor = null) {
 
     trackPoints = sel.points || []; 
     
-    /**
-     * ✅ 強化版斷線函數
-     * 作用：將一維座標陣列拆解為二維，消除跳躍直線
-     */
     const breakTracks = (pts) => {
         if (!pts || pts.length === 0) return [];
         const result = [];
         let currentSeg = [pts[0]];
-        
         for (let j = 1; j < pts.length; j++) {
             const p1 = pts[j-1];
             const p2 = pts[j];
-
-            // 取得精確座標 (相容多種 Leaflet 與 GPX 解析格式)
-            const lat1 = p1.lat !== undefined ? p1.lat : (p1[0] !== undefined ? p1[0] : p1.lat);
-            const lng1 = p1.lng !== undefined ? p1.lng : (p1.lon !== undefined ? p1.lon : (p1[1] !== undefined ? p1[1] : p1.lng));
-            const lat2 = p2.lat !== undefined ? p2.lat : (p2[0] !== undefined ? p2[0] : p2.lat);
-            const lng2 = p2.lng !== undefined ? p2.lng : (p2.lon !== undefined ? p2.lon : (p2[1] !== undefined ? p2[1] : p2.lng));
-
+            const lat1 = p1.lat ?? p1[0] ?? p1.lat;
+            const lng1 = p1.lng ?? p1.lon ?? p1[1] ?? p1.lng;
+            const lat2 = p2.lat ?? p2[0] ?? p2.lat;
+            const lng2 = p2.lng ?? p2.lon ?? p2[1] ?? p2.lng;
             const d = Math.sqrt(Math.pow(lat1 - lat2, 2) + Math.pow(lng1 - lng2, 2));
-            
-            // 閾值 0.001 約 100~150公尺，足以切斷所有規劃線產生的異常直線
             if (d > 0.001) {
                 if (currentSeg.length > 0) result.push(currentSeg);
                 currentSeg = [];
@@ -942,52 +932,33 @@ function loadRoute(index, customColor = null) {
         return result;
     };
 
-    // --- 1. 處理多檔案模式圖層顯示 (讓所有 GPX 保持可見但淡化) ---
+    // --- 1. 處理多檔案模式圖層顯示 ---
     let finalColor = customColor || "red"; 
     if (typeof multiGpxStack !== 'undefined' && multiGpxStack.length > 0) {
-        // 取得目前操作中的檔案索引
         const stackIdx = (window.currentMultiIndex !== undefined) ? window.currentMultiIndex : 0;
-        
         multiGpxStack.forEach((item, i) => {
             const layer = item.layer;
             if (!(layer instanceof L.Polyline)) return;
-
-            // 確保背景圖層也經過斷線處理 (先把舊數據攤平再重新切斷)
             const currentRawPts = layer.getLatLngs().flat(Infinity);
             layer.setLatLngs(breakTracks(currentRawPts)); 
 
             if (i === stackIdx) {
-                // 如果是目前這份檔案
                 const isSelectingCombined = (index === 0 || sel.name.includes("結合"));
-
                 if (isSelectingCombined) {
-                    // 選中結合版時，隱藏背景原始層，由下方「2. 繪製軌跡」畫出的高亮線取代
                     layer.setStyle({ opacity: 0, weight: 0 });
                 } else {
-                    // ✅ 選中子路線時，將結合版設為「淡色背景」
-                    layer.setStyle({ 
-                        color: item.color || "#666", 
-                        opacity: 0.5,      
-                        weight: 4,          
-                        dashArray: "5, 8"   // 虛線區分背景
-                    });
+                    layer.setStyle({ color: item.color || "#666", opacity: 0.5, weight: 4, dashArray: "5, 8" });
                     layer.bringToBack();
                 }
                 if (item.color) finalColor = item.color;
             } else {
-                // ✅ 其他匯入的 GPX 檔案：也要顯示，但更淡一點
-                layer.setStyle({ 
-                    color: item.color || "#999", 
-                    opacity: 0.5, 
-                    weight: 4,
-                    dashArray: null 
-                });
+                layer.setStyle({ color: item.color || "#999", opacity: 0.5, weight: 4, dashArray: null });
                 layer.bringToBack();
             }
         });
     }
 
-    // --- 清除舊的高亮圖層 ---
+    // --- 清除舊圖層 ---
     if (polyline) map.removeLayer(polyline);
     markers.forEach(m => map.removeLayer(m));
     wptMarkers.forEach(m => map.removeLayer(m));
@@ -995,158 +966,116 @@ function loadRoute(index, customColor = null) {
     markers = []; wptMarkers = []; polyline = null; 
 
     // --- 2. 繪製目前選中的高亮軌跡 ---
- if (trackPoints && trackPoints.length > 0) {
+    if (trackPoints && trackPoints.length > 0) {
         const segments = breakTracks(trackPoints);
+        polyline = L.polyline(segments, { color: finalColor, weight: 6, opacity: 0.8 }).addTo(map);
 
-        polyline = L.polyline(segments, {
-            color: finalColor, weight: 6, opacity: 0.8
-        }).addTo(map);
-
-        const checkAndFitBounds = (targetBounds) => {
-            if (!targetBounds || !targetBounds.isValid()) return;
-            if (!map.getBounds().pad(0.05).intersects(targetBounds)) {
-                map.fitBounds(targetBounds, { padding: [20, 20], maxZoom: 16, animate: true });
+        if (polyline.getBounds().isValid()) {
+            if (!map.getBounds().pad(0.05).intersects(polyline.getBounds())) {
+                map.fitBounds(polyline.getBounds(), { padding: [20, 20], maxZoom: 16, animate: true });
             }
-        };
-        checkAndFitBounds(polyline.getBounds());
+        }
 
-        // 軌跡點擊邏輯 (維持不變)
         polyline.on('click', (e) => {
             L.DomEvent.stopPropagation(e);
             let minD = Infinity, idx = 0;
-            
-            // 1. 找出距離點擊位置最近的軌跡點索引
             trackPoints.forEach((p, pIdx) => {
                 const d = Math.sqrt((p.lat - e.latlng.lat)**2 + (p.lon - e.latlng.lng)**2);
                 if (d < minD) { minD = d; idx = pIdx; }
             });
-            
-            // 2. 判斷點擊距離（約 15 公尺內觸發）
             if (minD * 111000 <= 15) {
-                // --- A. 同步進度軸 (ProgressBar) ---
-                const progressBar = document.getElementById('gpxProgressBar'); // 使用您程式碼中的 ID
+                const progressBar = document.getElementById('gpxProgressBar');
                 if (progressBar) {
                     progressBar.value = idx;
-                    // 重要：手動觸發 input 事件，讓 setupProgressBar 裡的監聽器執行（移動地圖標記、更新距離文字）
-                    const inputEvent = new Event('input', { bubbles: true });
-                    progressBar.dispatchEvent(inputEvent);
+                    progressBar.dispatchEvent(new Event('input', { bubbles: true }));
                 }
-
-                // --- B. 同步高度表 (Elevation Chart) ---
-                if (chart) { // 您 drawElevationChart 使用的是全域變數 chart
+                if (chart) {
                     const meta = chart.getDatasetMeta(0);
                     const point = meta.data[idx];
-                    
                     if (point) {
-                        // 模擬 Chart.js 的 Active 狀態與 Tooltip
                         chart.setActiveElements([{ datasetIndex: 0, index: idx }]);
-                        chart.tooltip.setActiveElements(
-                            [{ datasetIndex: 0, index: idx }],
-                            { x: point.x, y: point.y }
-                        );
-                        chart.update('none'); // 使用 'none' 模式避免多餘動畫
+                        chart.tooltip.setActiveElements([{ datasetIndex: 0, index: idx }], { x: point.x, y: point.y });
+                        chart.update('none');
                     }
                 }
-
-                // --- C. 地圖指示點與彈窗 (您的原始邏輯) ---
-									if (!hoverMarker) {
-									    // 將 yellow 換成小藍點樣式：藍色填充 + 白色粗外框
-									    hoverMarker = L.circleMarker([0,0], {
-									        radius: 7, 
-									        color: '#ffffff',     // 外框換成白色
-									        weight: 2,            // 外框粗細
-									        fillColor: '#1a73e8', // 填充換成 Google Blue
-									        fillOpacity: 1
-									    }).addTo(map);
-									    } else {
-									    // 2. 關鍵：如果標記已經存在，但目前不在地圖上，強制加回去
-									    if (!map.hasLayer(hoverMarker)) {
-									        hoverMarker.addTo(map);
-									    }
-								
-									}
-                hoverMarker.setLatLng([trackPoints[idx].lat, trackPoints[idx].lon]).bringToFront();
-                hoverMarker.bringToFront();
-                // 呼叫您定義的彈窗函式
-                if (typeof showCustomPopup === 'function') {
-                    showCustomPopup(idx, "位置資訊");
+                if (!hoverMarker) {
+                    hoverMarker = L.circleMarker([0,0], { radius: 7, color: '#ffffff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1 }).addTo(map);
+                } else if (!map.hasLayer(hoverMarker)) {
+                    hoverMarker.addTo(map);
                 }
+                hoverMarker.setLatLng([trackPoints[idx].lat, trackPoints[idx].lon]).bringToFront();
+                if (typeof showCustomPopup === 'function') showCustomPopup(idx, "位置資訊");
             }
         });
 
-        // ✅ 修改後的起點與終點標記邏輯
+        // 起點與終點
         try {
-            const startP = trackPoints[0];
-            const startMarker = L.marker([startP.lat, startP.lon], { 
-                icon: startIcon,
-                zIndexOffset: 1000 
-            }).addTo(map);
-            
-            startMarker.on('click', (e) => {
-                L.DomEvent.stopPropagation(e);
-                // 只要傳入索引 0，且不傳入 realLat/realLon，就會進入標準軌跡模式顯示時間
-                showCustomPopup(0, "起點"); 
-            });
+            const startMarker = L.marker([trackPoints[0].lat, trackPoints[0].lon], { icon: startIcon, zIndexOffset: 1000 }).addTo(map);
+            startMarker.on('click', (e) => { L.DomEvent.stopPropagation(e); showCustomPopup(0, "起點"); });
             markers.push(startMarker);
 
-            // 終點部分也建議同步
             const lastIdx = trackPoints.length - 1;
-            const endMarker = L.marker([trackPoints[lastIdx].lat, trackPoints[lastIdx].lon], { 
-                icon: endIcon,
-                zIndexOffset: 1000 
-            }).addTo(map);
-            
-            endMarker.on('click', (e) => {
-                L.DomEvent.stopPropagation(e);
-                showCustomPopup(lastIdx, "終點");
-            });
+            const endMarker = L.marker([trackPoints[lastIdx].lat, trackPoints[lastIdx].lon], { icon: endIcon, zIndexOffset: 1000 }).addTo(map);
+            endMarker.on('click', (e) => { L.DomEvent.stopPropagation(e); showCustomPopup(lastIdx, "終點"); });
             markers.push(endMarker);
-            
-        } catch (err) {
-            console.error(">>> [ERR] Marker 綁定失敗:", err);
-        }
+        } catch (err) {}
 
         if (typeof drawElevationChart === 'function') drawElevationChart();
     }
 
-    // --- 3. 繪製航點 ---
-			if (sel.waypoints && sel.waypoints.length > 0) {
-			    sel.waypoints.forEach((w) => {
-			        let tIdx = 0;
-			        if (trackPoints.length > 0) {
-			            let minD = Infinity;
-			            trackPoints.forEach((tp, pi) => {
-			                let d = Math.sqrt((w.lat - tp.lat) ** 2 + (w.lon - tp.lon) ** 2);
-			                if (d < minD) { minD = d; tIdx = pi; }
-			            });
-			        }
-			        const wm = L.marker([w.lat, w.lon], { icon: wptIcon }).addTo(map);
-			
-			        // ✅ 修改這裡：根據「顯示名稱」按鈕狀態決定 Tooltip 行為
-			        if (typeof showWptNameAlways !== 'undefined' && showWptNameAlways) {
-			            // 如果開啟「顯示名稱」：永久顯示，且不遮擋滑鼠
-			            wm.bindTooltip(w.name, { 
-			                permanent: true, 
-			                direction: 'right', 
-			                offset: [10, 0], 
-			                className: 'wpt-label-label' 
-			            }).openTooltip();
-			        } else {
-			            // ✅ 如果隱藏名稱：設定為非永久 (滑鼠移入才顯示)
-			            wm.bindTooltip(w.name, { 
-			                permanent: false, 
-			                direction: 'top', 
-			                offset: [0, -10] 
-			            });
-			        }
-			
-			        wm.on('click', (e) => { 
-			            L.DomEvent.stopPropagation(e); 
-			            showCustomPopup(tIdx, w.name, null, w.lat, w.lon); 
-			        });
-			        wptMarkers.push(wm);
-			    });
-			}
+    // --- 3. 繪製航點 (關鍵修正：增加地圖顯示過濾) ---
+    // --- 3. 繪製航點 (智慧距離過濾版) ---
+    if (sel.waypoints && sel.waypoints.length > 0) {
+        const activeIdx = window.currentActiveIndex || 0;
+
+        // ✅ 核心邏輯：決定哪些航點該顯示
+        const displayWaypoints = sel.waypoints.filter(w => {
+            // 1. 如果是結合版 (Index 0)，顯示全部
+            if (activeIdx === 0) return true;
+            
+            // 2. 如果是自訂新增點且有標籤，按標籤過濾
+            if (w.belongsToRoute !== undefined) {
+                return w.belongsToRoute === activeIdx;
+            }
+
+            // 3. 【關鍵】原始點：判斷是否在目前這段軌跡的「附近」
+            // 0.002 經緯度約等於 200 公尺
+            if (trackPoints && trackPoints.length > 0) {
+                return trackPoints.some(tp => {
+                    const d = Math.sqrt(Math.pow(w.lat - tp.lat, 2) + Math.pow(w.lon - tp.lon, 2));
+                    return d < 0.002; 
+                });
+            }
+            return true;
+        });
+
+        displayWaypoints.forEach((w) => {
+            let tIdx = 0;
+            if (trackPoints.length > 0) {
+                let minD = Infinity;
+                trackPoints.forEach((tp, pi) => {
+                    let d = Math.sqrt((w.lat - tp.lat) ** 2 + (w.lon - tp.lon) ** 2);
+                    if (d < minD) { minD = d; tIdx = pi; }
+                });
+            }
+            
+            const wm = L.marker([w.lat, w.lon], { icon: wptIcon }).addTo(map);
+            const isAlways = typeof showWptNameAlways !== 'undefined' && showWptNameAlways;
+            wm.bindTooltip(w.name, { 
+                permanent: isAlways, 
+                direction: isAlways ? 'right' : 'top', 
+                offset: isAlways ? [10, 0] : [0, -10],
+                className: isAlways ? 'wpt-label-label' : ''
+            });
+            if (isAlways) wm.openTooltip();
+
+            wm.on('click', (e) => { 
+                L.DomEvent.stopPropagation(e); 
+                showCustomPopup(tIdx, w.name, null, w.lat, w.lon); 
+            });
+            wptMarkers.push(wm);
+        });
+    }
 
     // --- 4. 最終 UI 更新 ---
     const startLat = (trackPoints.length > 0) ? trackPoints[0].lat : (sel.waypoints?.[0]?.lat || null);
@@ -1155,11 +1084,12 @@ function loadRoute(index, customColor = null) {
         if (!hoverMarker) hoverMarker = L.circleMarker([startLat, startLon], { radius: 6, color: "blue", fillColor: "#fff", fillOpacity: 1, weight: 3 }).addTo(map);
         else hoverMarker.setLatLng([startLat, startLon]).bringToFront();
     }
+    
     if (typeof renderRouteInfo === 'function') renderRouteInfo();
-if (typeof renderWaypointsAndPeaks === 'function') {
+    
+    // ✅ 更新側邊欄列表 (內部已有過濾邏輯)
+    if (typeof renderWaypointsAndPeaks === 'function') {
         renderWaypointsAndPeaks(sel); 
-    } else {
-        renderWptList(sel.waypoints);
     }
     
     initProgressBar();
@@ -1533,26 +1463,38 @@ function showCustomPopup(idx, title, offPathEle = null, realLat = null, realLon 
   const lon = isWaypoint ? realLon : p.lon;
   const ele = offPathEle || (p.ele ? p.ele.toFixed(0) : "---");
   
-  // ✅ 修正距離顯示：即便 idx 是 999999 (新航點)，如果原本 p 有距離資訊就顯示
   const dist = (p.distance !== undefined) ? p.distance.toFixed(2) : null;
 
   let waypointTime = null;
   let waypointIdx = -1; 
-  const activeIdx = (typeof window.currentMultiIndex !== 'undefined') ? window.currentMultiIndex : 0;
-  const currentGpx = (typeof allTracks !== 'undefined') ? allTracks[activeIdx] : multiGpxStack[activeIdx];
+  const activeIdx = window.currentActiveIndex || 0;
+  // ✅ 修正：確保 currentGpx 指向正確的資料源
+  const currentGpx = (window.allTracks && window.allTracks[activeIdx]) ? window.allTracks[activeIdx] : null;
 
   if (currentGpx && currentGpx.waypoints) {
+      // ✅ 修正：放寬座標比對精度 (從 0.000001 改為 0.00001)，避免浮點數誤差
       waypointIdx = currentGpx.waypoints.findIndex(w => 
-          Math.abs(w.lat - lat) < 0.000001 && Math.abs(w.lon - lon) < 0.000001
+          Math.abs(w.lat - lat) < 0.00001 && Math.abs(w.lon - lon) < 0.00001
       );
+      
       if (waypointIdx !== -1) {
           const wptData = currentGpx.waypoints[waypointIdx];
-          waypointTime = (wptData && wptData.localTime !== "無時間資訊") ? wptData.localTime : null;
+          // ✅ 修正：優先順序 localTime -> time -> 回退值
+          if (wptData.localTime && wptData.localTime !== "無時間資訊") {
+              waypointTime = wptData.localTime;
+          } else if (wptData.time) {
+              // 如果只有 ISO 時間，轉成本地格式
+              waypointTime = new Date(wptData.time).toLocaleString();
+          }
       }
   }
 
+  // ✅ 修正：定義最終顯示在彈窗視窗的時間字串
+  // 如果是手動新增點，p.timeLocal 會是 undefined，所以必須依賴上面的 waypointTime
+  const displayTime = waypointTime || p.timeLocal || '---';
+
   // 編輯按鈕
-  const editIcon = `<span class="material-icons" style="font-size:16px; cursor:pointer; vertical-align:middle; margin-left:4px; color:#1a73e8;" onclick="handleWptEdit(${waypointIdx !== -1 ? waypointIdx : 'null'}, ${lat}, ${lon}, ${ele}, '${title}', '${waypointTime || p.timeLocal || ''}', ${idx})">edit</span>`;
+  const editIcon = `<span class="material-icons" style="font-size:16px; cursor:pointer; vertical-align:middle; margin-left:4px; color:#1a73e8;" onclick="handleWptEdit(${waypointIdx !== -1 ? waypointIdx : 'null'}, ${lat}, ${lon}, ${ele}, '${title}', '${displayTime}', ${idx})">edit</span>`;
 
   const gUrl = `https://www.google.com/maps?q=${lat},${lon}`;
   const gMapIconBtn = `<a href="${gUrl}" target="_blank" style="text-decoration:none; margin-right:8px; display:inline-flex; align-items:center; justify-content:center; width: 28px; height: 28px; background: #fff; border: 1px solid #ccc; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); vertical-align: middle;"><img src="https://ychiking.github.io/gpx-online-viewer/GoogleMaps.png" style="width:18px; height:18px;" alt="GMap"></a>`;
@@ -1561,7 +1503,6 @@ function showCustomPopup(idx, title, offPathEle = null, realLat = null, realLon 
   const twd97 = proj4(WGS84_DEF, TWD97_DEF, [lon, lat]);
   const twd67 = proj4(WGS84_DEF, TWD67_DEF, [lon, lat]);
 
-  // ✅ 判斷是否真的不在路徑上 (排除剛新增的點)
   const isActuallyOffPath = (offPathEle !== null && idx !== 999999);
 
   let content = `
@@ -1572,7 +1513,7 @@ function showCustomPopup(idx, title, offPathEle = null, realLat = null, realLon 
       </div>
       高度: ${ele} m<br>
       ${dist ? `距離: ${dist} km<br>` : ''}
-      時間: ${waypointTime || p.timeLocal || '---'}<br>
+      時間: ${displayTime}<br> 
       WGS84: ${lat.toFixed(5)}, ${lon.toFixed(5)}<br>
       TWD97: ${Math.round(twd97[0])}, ${Math.round(twd97[1])}<br>
       TWD67: ${Math.round(twd67[0])}, ${Math.round(twd67[1])}<br>
@@ -2101,7 +2042,10 @@ function renderRouteInfo() {
   document.getElementById("routeSummary").innerHTML = `
     檔案名稱：${displayName}<br>
     記錄日期：${recordDate}<br>
-    路　　線：${currentRoute.name}<br>
+    路　　線：${currentRoute.name}
+    <span class="material-icons" 
+                    style="font-size:16px; cursor:pointer; color:#1a73e8; vertical-align:middle; margin-left:4px;" 
+                    onclick="renameSubRoute(${currentTrackIdx})">edit</span><br>
     里　　程：${displayDist.toFixed(2)} km<br>
     花費時間：${timeString}<br>
     最高海拔：${displayMaxEle.toFixed(0)} m<br>
@@ -2137,51 +2081,86 @@ function renderEmptyRouteSummary(currentRoute) {
 }
 
 // 輔助函式：渲染航點列表與山岳偵測按鈕
-function renderWaypointsAndPeaks(currentRoute) {
+window.renderWaypointsAndPeaks = function(currentRoute) {
     const wptListContainer = document.getElementById("wptList");
     const navShortcuts = document.getElementById("navShortcuts");
+    if (!wptListContainer) return;
+
     let listHtml = "";
     let shortcutsHtml = "";
 
-    if (currentRoute.waypoints && currentRoute.waypoints.length > 0) {
-        const icon = showWptNameAlways ? "visibility_off" : "visibility";
+    // ✅ 修正 1：確保即使沒匯入 GPX，也能抓到 allTracks[0] 作為預設顯示
+    const activeIdx = window.currentActiveIndex || 0;
+    const route = currentRoute || (window.allTracks ? window.allTracks[activeIdx] : null);
+
+    if (!route) {
+        wptListContainer.innerHTML = "";
+        return;
+    }
+
+    const currentTrackPts = route.points || [];
+    const rawWaypoints = route.waypoints || [];
+
+    // ✅ 修正 2：簡化過濾邏輯，確保手動點（belongsToRoute）與全空狀態能通過
+    const filteredWpts = rawWaypoints.map((w, i) => ({ ...w, originalIdx: i }))
+        .filter(w => {
+            // 如果是結合版 (0) 或是根本沒有軌跡點，就顯示所有航點
+            if (activeIdx === 0 || currentTrackPts.length === 0) return true;
+            
+            // 1. 自定義點：按歸屬標籤
+            if (w.belongsToRoute !== undefined) {
+                return w.belongsToRoute === activeIdx;
+            }
+
+            // 2. 原始點：按距離 (200公尺內)
+            return currentTrackPts.some(tp => {
+                const d = Math.sqrt(Math.pow(w.lat - tp.lat, 2) + Math.pow(w.lon - tp.lon, 2));
+                return d < 0.002; 
+            });
+        });
+
+    // 渲染航點列表
+    if (filteredWpts.length > 0) {
+        const icon = (typeof showWptNameAlways !== 'undefined' && showWptNameAlways) ? "visibility_off" : "visibility";
         shortcutsHtml += `<button type="button" class="shortcut-btn" onclick="toggleWptNames()" style="display:inline-flex; align-items:center;"><span class="material-icons" style="font-size:18px; margin-right:4px;">${icon}</span><span>航點名稱</span></button>`;
         shortcutsHtml += `<button type="button" class="shortcut-btn" onclick="document.getElementById('anchorWpt').scrollIntoView({behavior: 'smooth'})">📍 航點列表</button>`;
 
-        listHtml += `<h4 id="anchorWpt" style="margin: 20px 0 10px 0;">📍 航點列表 (${currentRoute.waypoints.length})</h4>`;
+        listHtml += `<h4 id="anchorWpt" style="margin: 20px 0 10px 0;">📍 航點列表 (${filteredWpts.length})</h4>`;
         listHtml += `<table class="wpt-table"><thead><tr><th style="width:10%">#</th><th style="width:35%">時間</th><th style="width:35%">名稱</th><th style="width:20%">操作</th></tr></thead><tbody>`;
         
-        currentRoute.waypoints.forEach((w, i) => {
+        filteredWpts.forEach((w, displayIdx) => {
+            // ✅ 修正 3：確保時間格式化 (localTime 為空時顯示 time 或當前時間)
+            const displayTime = w.localTime || (w.time ? new Date(w.time).toLocaleString() : "無時間資訊");
+            
             listHtml += `<tr>
-                <td><span class="wpt-link" onclick="focusWaypoint(${w.lat}, ${w.lon}, '${w.name}')">${i + 1}</span></td>
-                <td>${w.localTime || ''}</td>
+                <td><span class="wpt-link" onclick="focusWaypoint(${w.lat}, ${w.lon}, '${w.name}')">${displayIdx + 1}</span></td>
+                <td>${displayTime}</td>
                 <td>${w.name}</td>
                 <td>
-                    <span class="material-icons wpt-action-icon" onclick="handleWptEdit(${i}, ${w.lat}, ${w.lon}, ${w.ele}, '${w.name}', '${w.localTime}')">edit</span>
-                    <span class="material-icons wpt-action-icon wpt-delete-icon" onclick="deleteWaypoint(${i})">delete</span>
+                    <span class="material-icons wpt-action-icon" onclick="handleWptEdit(${w.originalIdx}, ${w.lat}, ${w.lon}, ${w.ele || 0}, '${w.name}', '${w.localTime || ''}')">edit</span>
+                    <span class="material-icons wpt-action-icon wpt-delete-icon" onclick="deleteWaypoint(${w.originalIdx})">delete</span>
                 </td>
             </tr>`;
         });
         listHtml += `</tbody></table>`;
     }
 
-  listHtml += `<h4 id="anchorPeak" style="margin: 30px 0 10px 0; font-size: 16px; color: #2c3e50; border-left: 5px solid #d35400; padding-left: 10px;">⛰️ 沿途山岳(200公尺內)</h4>`;
-  listHtml += `
+    // ⛰️ 山岳偵測區塊 (保持不變)
+    listHtml += `<h4 id="anchorPeak" style="margin: 30px 0 10px 0; font-size: 16px; color: #2c3e50; border-left: 5px solid #d35400; padding-left: 10px;">⛰️ 沿途山岳(200公尺內)</h4>`;
+    listHtml += `
     <div id="aiPeaksSection">
         <div style="padding:15px; text-align:center; background:#f8f9fa; border:1px dashed #ccc; border-radius:8px; margin:10px 0;">
             <p style="margin-bottom:8px; color:#666; font-size:13px;">📍 已準備好偵測此路線周圍山岳</p>
-            <button onclick="detectPeaksAlongRoute(true)" style="padding: 10px 25px; background: #1a73e8; color: white; border: none; border-radius: 50px; cursor: pointer; font-weight: bold; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; outline: none;">🔍 偵測此路線山岳</button>
+            <button onclick="detectPeaksAlongRoute(true)" style="padding: 10px 25px; background: #1a73e8; color: white; border: none; border-radius: 50px; cursor: pointer; font-weight: bold; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); display: inline-flex; align-items: center; justify-content: center;">🔍 偵測此路線山岳</button>
         </div>
     </div>`;
-  
-  shortcutsHtml += `<button type="button" class="shortcut-btn" onclick="document.getElementById('anchorPeak').scrollIntoView({behavior: 'smooth'})">⛰️ 沿途山岳</button>`;
+    
+    shortcutsHtml += `<button type="button" class="shortcut-btn" onclick="document.getElementById('anchorPeak').scrollIntoView({behavior: 'smooth'})">⛰️ 沿途山岳</button>`;
 
-  wptListContainer.innerHTML = listHtml;
-  wptListContainer.style.display = "block";
-  navShortcuts.innerHTML = shortcutsHtml;
-}
-
-
+    wptListContainer.innerHTML = listHtml;
+    wptListContainer.style.display = "block";
+    if (navShortcuts) navShortcuts.innerHTML = shortcutsHtml;
+};
 function formatDate(d) { return d.toISOString().replace("T", " ").substring(0, 19); }
 
 // ================= 自動偵測經過山岳 (Overpass API) =================
@@ -2689,72 +2668,82 @@ function switchMultiGpx(index) {
     map.closePopup();
     window.currentFileNameForDisplay = data.name;
 
-    // 1. 處理 UI 樣式 (按鈕高亮與地圖淡化)
+    // 1. UI 樣式處理 (省略...)
     multiGpxStack.forEach((item, i) => {
         const btn = document.getElementById(`multi-btn-${i}`);
         if (i === index) {
             item.layer.setStyle({ color: item.color, weight: 8, opacity: 1.0 }).bringToFront(); 
-            if (btn) {
-                btn.classList.add('active');
-                btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-            }
-            if (!isGpxInView(index)) {
-                map.fitBounds(item.layer.getBounds(), { padding: [20, 20], maxZoom: 16 });
-            }
+            if (btn) btn.classList.add('active');
+            if (!isGpxInView(index)) map.fitBounds(item.layer.getBounds(), { padding: [20, 20], maxZoom: 16 });
         } else {
             item.layer.setStyle({ color: item.color, weight: 5, opacity: 0.5 });
             if (btn) btn.classList.remove('active');
         }
     });
 
-    // 2. 🔴 核心：載入資料並恢復航點
+    // ✅ 定義內部的同步工具 (這就是解決 ReferenceError 的關鍵)
+    const applyCustomNames = () => {
+        if (data.customRouteNames && window.allTracks) {
+            Object.keys(data.customRouteNames).forEach(id => {
+                const trackIdx = parseInt(id);
+                if (allTracks[trackIdx]) {
+                    allTracks[trackIdx].name = data.customRouteNames[trackIdx];
+                }
+            });
+
+            // 同步更新下拉選單文字
+            const routeSelect = document.getElementById("routeSelect");
+            if (routeSelect) {
+                allTracks.forEach((t, i) => {
+                    if (routeSelect.options[i]) routeSelect.options[i].text = t.name;
+                });
+            }
+        }
+    };
+
+    // 2. 🔴 核心同步邏輯
     if (data.content) {
-        // 方案 A: 含有原始 XML (支援一檔多線)
         const pureFileName = data.name.replace(/\.[^/.]+$/, "");
         
-        // 執行解析 (這會重建 allTracks 陣列)
+        // 執行解析 (這會重建 allTracks，導致名字變回舊的)
         parseGPX(data.content, pureFileName);
         
-        // ✅ 關鍵同步：將存在 multiGpxStack 裡最新的航點資料，塞入剛剛解析出的 allTracks[0]
+        // 第一次覆寫：解析完立刻蓋回
+        applyCustomNames();
+        
+        // 同步航點
         if (allTracks && allTracks.length > 0) {
-            allTracks[0].waypoints = data.waypoints || []; 
+            allTracks.forEach(track => {
+                track.waypoints = data.waypoints || [];
+            });
         }
 
-        // 呼叫載入 (通常 index 0 為結合軌跡，能保留原功能)
         setTimeout(() => {
-            if (typeof loadRoute === 'function') loadRoute(0);
+            if (typeof loadRoute === 'function') {
+                loadRoute(0);
+                // 第二次覆寫：確保 loadRoute 內部渲染完後，名字依舊正確
+                applyCustomNames(); 
+                if (typeof renderRouteInfo === 'function') renderRouteInfo();
+            }
             if (window.activeRouteLayer) activeRouteLayer.setStyle({ color: data.color });
         }, 100);
 
     } else {
-        // 方案 B: 手動新增的軌跡
-        allTracks = [{ 
-            name: data.name, 
-            points: data.points, 
-            waypoints: data.waypoints 
-        }];
+        // 方案 B: 手動軌跡
+        allTracks = [{ name: data.name, points: data.points, waypoints: data.waypoints }];
         trackPoints = data.points; 
         if (typeof loadRoute === 'function') loadRoute(0);
     }
 
-    // 3. UI 輔助功能開啟
+    // 3. UI 顯示調整
     const toggleBtn = document.getElementById("toggleChartBtn");
-    if (toggleBtn) {
-        toggleBtn.style.display = "block"; 
-        toggleBtn.textContent = "收合高度表"; 
-    }
+    if (toggleBtn) toggleBtn.style.display = "block";
     document.getElementById("chartContainer").style.display = "block";
     document.getElementById("wptList").style.display = "block";
 
     if (typeof detectPeaksAlongRoute === 'function') {
-        if (typeof peakAbortController !== 'undefined' && peakAbortController) {
-            peakAbortController.abort();
-        }
+        if (typeof peakAbortController !== 'undefined' && peakAbortController) peakAbortController.abort();
         detectPeaksAlongRoute(false); 
-    }
-    
-    if (typeof hoverMarker !== 'undefined' && hoverMarker) { 
-        hoverMarker.bringToFront(); 
     }
 }
 
@@ -3402,150 +3391,158 @@ window.toggleColorPicker = function(i) {
 };
 
 window.handleWptEdit = function(existingIdx, lat, lon, ele, oldName, timeStr, originalIdx) {
-    // 取得或初始化索引
+    // 1. 初始化資料結構
     if (typeof window.currentMultiIndex === 'undefined') window.currentMultiIndex = 0;
-    let activeIdx = window.currentMultiIndex;
-
-    // ✅ 關鍵：如果目前完全沒有軌跡資料，自動建立一個基礎結構
-    if (typeof multiGpxStack === 'undefined' || !multiGpxStack) window.multiGpxStack = [];
+    let stackIdx = window.currentMultiIndex;
     
-    if (!multiGpxStack[activeIdx]) {
-        multiGpxStack[activeIdx] = {
-            name: "手動新增航點",
-            points: [],    // 空軌跡
-            waypoints: [], // 準備放航點
-            stats: { totalDistance: 0, totalElevation: 0 }
+    if (typeof multiGpxStack === 'undefined' || !multiGpxStack) window.multiGpxStack = [];
+
+    // ✅ 如果目前是全空，強行建立第一個數據容器
+    if (!multiGpxStack[stackIdx]) {
+        multiGpxStack[stackIdx] = { 
+            name: "手動新增航點", 
+            points: [], 
+            waypoints: [], 
+            stats: { totalDistance: 0, totalElevation: 0 },
+            isCombined: false 
         };
-        // 同步到 allTracks 確保 UI 能讀取
-        if (typeof allTracks !== 'undefined') {
-            allTracks[activeIdx] = multiGpxStack[activeIdx];
-        } else {
-            window.allTracks = [multiGpxStack[activeIdx]];
-        }
     }
 
-    const currentItem = multiGpxStack[activeIdx];
+    // ✅ 確保 allTracks 不是空的 (列表渲染依賴此變數)
+    if (typeof allTracks === 'undefined' || !allTracks || allTracks.length === 0) {
+        window.allTracks = [multiGpxStack[stackIdx]];
+    }
+
+    let activeIdx = window.currentActiveIndex || 0;
+    if (!allTracks[activeIdx]) activeIdx = 0;
+
     const newName = prompt("請輸入航點名稱：", oldName);
     if (newName === null) return; 
     const finalName = newName.trim() === "" ? oldName : newName.trim();
 
-    if (!currentItem.waypoints) currentItem.waypoints = [];
+    // 內建格式化工具，確保在任何情況下都能產生時間字串
+    const getNowStr = () => {
+        const d = new Date();
+        return d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate() + " " + 
+               d.getHours().toString().padStart(2, '0') + ":" + 
+               d.getMinutes().toString().padStart(2, '0') + ":" + 
+               d.getSeconds().toString().padStart(2, '0');
+    };
 
-    const isFromTrack = (originalIdx !== null && originalIdx !== undefined);
-
-    if (existingIdx !== null && existingIdx !== -1) {
-        currentItem.waypoints[existingIdx].name = finalName;
+    let targetWpt;
+    if (existingIdx !== null && existingIdx !== -1 && multiGpxStack[stackIdx].waypoints[existingIdx]) {
+        // 編輯模式
+        multiGpxStack[stackIdx].waypoints[existingIdx].name = finalName;
+        targetWpt = multiGpxStack[stackIdx].waypoints[existingIdx];
     } else {
-        // 新增航點
-        let newWptObj = { 
-            lat, 
-            lon, 
-            name: finalName,
-            isCustom: true // 標記為新增，切換後渲染才會長出 [新增] 標籤
+        // ✅ 新增模式：確保 time 與 localTime 都有值
+        targetWpt = { 
+            lat, lon, 
+            name: finalName, 
+            isCustom: true,
+            belongsToRoute: activeIdx,
+            time: new Date().toISOString(),
+            localTime: getNowStr() // 👈 這裡確保了列表會顯示時間
         };
+        
+        targetWpt.ele = (ele !== null && ele !== "---" && ele !== undefined) ? parseFloat(ele) : 0;
 
-        if (isFromTrack) {
-            if (ele !== null && ele !== "---") newWptObj.ele = parseFloat(ele);
-            // ✅ [關鍵] 從軌跡新增時，也要轉換出 localTime，列表才會有時間
-            if (timeStr && timeStr !== "null" && timeStr !== "無時間資訊") {
-                newWptObj.time = timeStr;
-                try {
-                    const d = new Date(timeStr);
-                    if (!isNaN(d)) {
-                        // 修正點：補償 8 小時時差，以抵銷 formatDate 內的 toISOString() 減去的 8 小時
-                        const localD = new Date(d.getTime() + 8 * 3600000);
-                        newWptObj.localTime = formatDate(localD);
-                    } else {
-                        newWptObj.localTime = timeStr;
-                    }
-                } catch(e) {
-                    newWptObj.localTime = timeStr;
+        // 如果是點轉航點，嘗試保留原時間
+        if (originalIdx !== null && originalIdx !== undefined && timeStr) {
+            targetWpt.time = timeStr;
+            try {
+                const d = new Date(timeStr);
+                if (!isNaN(d.getTime())) {
+                    targetWpt.localTime = (typeof formatDate === 'function') ? formatDate(d) : getNowStr();
                 }
-            } else {
-                newWptObj.localTime = "無時間資訊";
-            }
-        } else {
-            // 自選位置
-            const now = new Date();
-            newWptObj.time = now.toISOString();
-            
-            // 修正點：自選位置也要補償 8 小時
-            const localNow = new Date(now.getTime() + 8 * 3600000);
-            newWptObj.localTime = formatDate(localNow);
-            
-            newWptObj.ele = (ele !== null && ele !== "---") ? parseFloat(ele) : 0;
+            } catch(e) {}
         }
         
-        currentItem.waypoints.push(newWptObj);
-
-        // 地圖畫圖示
-        if (typeof map !== 'undefined') {
-            const marker = L.marker([lat, lon], { 
-                icon: (typeof wptIcon !== 'undefined' ? wptIcon : new L.Icon.Default()) 
-            }).addTo(map);
-            marker.bindTooltip(finalName, { direction: 'top', offset: [0, -10] });
-            marker.on('click', (e) => {
-                L.DomEvent.stopPropagation(e);
-                showCustomPopup(isFromTrack ? originalIdx : null, finalName, null, lat, lon);
-            });
-            if (typeof wptMarkers !== 'undefined') wptMarkers.push(marker);
-        }
+        multiGpxStack[stackIdx].waypoints.push(targetWpt);
     }
 
-    // 更新側邊欄列表
-    if (typeof renderWaypointsAndPeaks === 'function') {
-        renderWaypointsAndPeaks(currentItem);
+    // 2. 同步資料 (這步很重要，確保 allTracks 的內容跟 stack 一致)
+    allTracks.forEach(track => {
+        track.waypoints = multiGpxStack[stackIdx].waypoints;
+    });
+
+    // 3. ✅ 強制顯示列表容器
+    // 在沒有 GPX 時，你的 CSS 可能把存放列表的 div 隱藏了，這裡把它打開
+    const wptSection = document.getElementById("waypointSection"); // 假設你的航點列表容器叫這個
+    if (wptSection) wptSection.style.display = "block";
+
+    // 4. 更新 UI
+    try {
+        if (typeof updateWptTable === 'function') {
+            updateWptTable(); 
+        }
+        // 如果有 render 函式也跑一下
+        if (typeof renderWaypointsAndPeaks === 'function') {
+            renderWaypointsAndPeaks(allTracks[activeIdx]);
+        }
+    } catch (e) {
+        console.log("列表更新中...", e);
     }
 
-    // 視窗處理
-    if (!isFromTrack) {
-        if (typeof currentPopup !== 'undefined' && currentPopup) {
-            let currentContent = currentPopup.getContent();
-            let newContent = currentContent.replace(`>${oldName}<`, `>${finalName}<`);
-            currentPopup.setContent(newContent);
-            if (!map.hasLayer(currentPopup)) currentPopup.openOn(map);
+    // 5. 地圖圖層處理
+    if (existingIdx === null || existingIdx === -1) {
+        const marker = L.marker([lat, lon], { 
+            icon: (typeof wptIcon !== 'undefined' ? wptIcon : new L.Icon.Default()) 
+        }).addTo(map);
+
+        // 綁定名稱
+        marker.bindTooltip(finalName, { 
+            permanent: (typeof showWptNameAlways !== 'undefined' ? showWptNameAlways : false), // 如果目前是「顯示名稱」模式，就設為永久顯示
+            direction: 'top', 
+            offset: [0, -10] 
+        });
+
+        // ✅ 關鍵修正：如果全域設定是顯示名稱，新增完立刻把它打開
+        if (typeof showWptNameAlways !== 'undefined' && showWptNameAlways) {
+            marker.openTooltip();
         }
-    } else {
-        setTimeout(() => { 
+
+        marker.on('click', (e) => {
+            L.DomEvent.stopPropagation(e);
             if (typeof showCustomPopup === 'function') {
-                showCustomPopup(originalIdx, finalName, null, lat, lon); 
+                showCustomPopup(null, finalName, null, lat, lon);
             }
-        }, 200);
+        });
+
+        if (typeof wptMarkers !== 'undefined') wptMarkers.push(marker);
     }
+
+    setTimeout(() => { 
+        if (typeof showCustomPopup === 'function') 
+            showCustomPopup(null, finalName, null, lat, lon); 
+    }, 200);
 };
 
 window.deleteWaypoint = function(idx) {
     if (!confirm("確定要刪除此航點嗎？")) return;
     
-    const activeIdx = (typeof window.currentMultiIndex !== 'undefined') ? window.currentMultiIndex : 0;
-    const currentItem = multiGpxStack[activeIdx];
-    const currentTrack = (typeof allTracks !== 'undefined') ? allTracks[activeIdx] : null;
+    const stackIdx = (typeof window.currentMultiIndex !== 'undefined') ? window.currentMultiIndex : 0;
+    const currentStackItem = multiGpxStack[stackIdx];
 
-    if (!currentItem || !currentItem.waypoints) return;
+    if (!currentStackItem || !currentStackItem.waypoints) return;
 
-    // 1. 同步刪除資料
-    currentItem.waypoints.splice(idx, 1);
-    if (currentTrack) {
-        currentTrack.waypoints = currentItem.waypoints;
+    // 1. 從 Stack 刪除
+    currentStackItem.waypoints.splice(idx, 1);
+
+    // 2. ✅ 同步到所有 allTracks (子路線)
+    if (typeof allTracks !== 'undefined' && Array.isArray(allTracks)) {
+        allTracks.forEach(track => {
+            track.waypoints = currentStackItem.waypoints;
+        });
     }
 
-    // 2. 更新 HTML 列表 (執行你提供的這個函式)
-    renderWaypointsAndPeaks(currentTrack || currentItem);
+    // 3. 重新渲染
+    renderWaypointsAndPeaks(allTracks[window.currentActiveIndex || 0]);
 
-    // 3. ✅ 關鍵：更新地圖圖標
-    // 根據你的程式碼，地圖上的圖示管理應該是在另一個函式
-    // 請檢查你的程式碼中是否有 drawWaypointsOnMap(currentTrack) 或類似的名稱
-    // 如果不確定，我們先嘗試用最通用的方式強迫系統重新讀取 currentTrack 並重繪：
+    // 4. 強制地圖刷新
     if (typeof loadRoute === 'function') {
-        // 先清除地圖上殘留的標記
-        if (typeof wptMarkers !== 'undefined' && Array.isArray(wptMarkers)) {
-            wptMarkers.forEach(m => { if (m && map.hasLayer(m)) map.removeLayer(m); });
-            wptMarkers.length = 0; 
-        }
-        // 呼叫 loadRoute 通常會重新觸發所有繪圖邏輯
-        loadRoute(activeIdx); 
+        loadRoute(window.currentActiveIndex || 0); 
     }
-
     if (typeof currentPopup !== 'undefined' && currentPopup) map.closePopup();
 };
 
@@ -3553,44 +3550,88 @@ window.deleteWaypoint = function(idx) {
 window.downloadCounters = window.downloadCounters || {};
 
 window.exportGpx = function(index) {
-    const idx = (index !== undefined) ? index : window.currentMultiIndex;
-    const item = (typeof multiGpxStack !== 'undefined') ? multiGpxStack[idx] : null;
+    // 1. 取得主索引
+    const idx = (index !== undefined) ? index : (window.currentMultiIndex || 0);
     
-    // ✅ 只要有 item 且裡面有航點，就過關
-    const hasWaypoints = item && item.waypoints && item.waypoints.length > 0;
-    const hasPoints = item && item.points && item.points.length > 0;
+    // 取得當前檔案的原始項目
+    const item = (typeof multiGpxStack !== 'undefined' && multiGpxStack) ? multiGpxStack[idx] : null;
 
-    if (!hasWaypoints && !hasPoints) {
+    // 2. 決定子路線索引
+    const routeSelect = document.getElementById("routeSelect");
+    let currentTrackIdx = 0; 
+    if (routeSelect && routeSelect.value !== "" && !isNaN(parseInt(routeSelect.value))) {
+        currentTrackIdx = parseInt(routeSelect.value);
+    }
+
+    // 3. 取得目標路線
+    // 如果連 allTracks 都不存在，嘗試從 multiGpxStack 補救
+    let currentRoute = (typeof allTracks !== 'undefined') ? allTracks[currentTrackIdx] : null;
+    
+    // 關鍵補救：如果 allTracks 沒東西但 stack 有，手動指向 stack
+    if (!currentRoute && item) {
+        currentRoute = item;
+    }
+
+    // --- 檢查是否有任何可匯出的內容 ---
+    const hasPoints = currentRoute && currentRoute.points && currentRoute.points.length > 0;
+    const hasWaypoints = currentRoute && currentRoute.waypoints && currentRoute.waypoints.length > 0;
+    // 額外檢查：如果這條線沒航點，但第一條線(或是手動線)有航點
+    const fallbackWaypoints = (typeof allTracks !== 'undefined' && allTracks[0]) ? allTracks[0].waypoints : [];
+    const hasAnyWaypoints = hasWaypoints || (fallbackWaypoints && fallbackWaypoints.length > 0);
+
+    if (!currentRoute || (!hasPoints && !hasAnyWaypoints)) {
         alert("沒有任何軌跡或航點資料可供匯出。");
         return;
     }
 
-    const pts = item.points || [];
-    const wpts = item.waypoints || [];
-    const trackName = item.name || "Exported_Route";
+    // 決定匯出檔名
+    const trackName = (currentRoute && currentRoute.name && currentRoute.name !== "手動編輯地圖") 
+                      ? currentRoute.name : (item ? item.name : "Manual_Waypoints");
 
     // XML 標頭
     let gpx = `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="YCHiking" xmlns="http://www.topografix.com/GPX/1/1">
   <metadata><name>${trackName}</name></metadata>`;
 
-    // ✅ 2. 處理軌跡 (只有在有軌跡點時才產生 <trk> 標籤)
-    if (pts.length > 0) {
-        gpx += `\n  <trk><name>${trackName}</name><trkseg>`;
-        pts.forEach(p => {
-            let timeTag = "";
-            if (p.time) { 
-                timeTag = `<time>${p.time}</time>`;
-            } else if (p.timeUTC) { 
-                timeTag = `<time>${new Date(p.timeUTC).toISOString()}</time>`;
-            }
-            const eleTag = `<ele>${p.ele || 0}</ele>`;
-            gpx += `\n      <trkpt lat="${p.lat}" lon="${p.lon}">${eleTag}${timeTag}</trkpt>`;
-        });
-        gpx += `\n    </trkseg>\n  </trk>`;
+    // 4. 處理軌跡 (Tracks)
+    let tracksToExport = [];
+    if (currentRoute && currentRoute.isCombined) {
+        // 如果是結合版，抓出所有非結合版的子路線
+        tracksToExport = allTracks.filter(t => !t.isCombined);
+    } else if (currentRoute) {
+        // 單一子路線或手動路線
+        tracksToExport = [currentRoute];
     }
 
-    // 3. 處理航點
+    tracksToExport.forEach((route) => {
+        const pts = route.points || [];
+        if (pts.length > 0) {
+            gpx += `\n  <trk><name>${route.name || "Track"}</name><trkseg>`;
+            pts.forEach(p => {
+                let timeTag = "";
+                if (p.time) { 
+                    timeTag = `<time>${p.time}</time>`;
+                } else if (p.timeUTC) { 
+                    timeTag = `<time>${new Date(p.timeUTC).toISOString()}</time>`;
+                }
+                const eleTag = `<ele>${p.ele || 0}</ele>`;
+                gpx += `\n      <trkpt lat="${p.lat}" lon="${p.lon}">${eleTag}${timeTag}</trkpt>`;
+            });
+            gpx += `\n    </trkseg>\n  </trk>`;
+        }
+    });
+
+    // 5. 處理航點 (Waypoints)
+    // 優先順序：目前選中的航點 > 第一條路線的航點 > Stack 裡的航點
+    let wpts = [];
+    if (hasWaypoints) {
+        wpts = currentRoute.waypoints;
+    } else if (fallbackWaypoints && fallbackWaypoints.length > 0) {
+        wpts = fallbackWaypoints;
+    } else if (item && item.waypoints) {
+        wpts = item.waypoints;
+    }
+
     wpts.forEach(w => {
         let timeTag = "";
         if (w.time) {
@@ -3599,8 +3640,10 @@ window.exportGpx = function(index) {
             timeTag = `<time>${new Date(w.timeUTC).toISOString()}</time>`;
         } else if (w.localTime && w.localTime !== "無時間資訊") {
             try {
-                const d = new Date(w.localTime.replace(/\//g, '-'));
-                if (!isNaN(d)) timeTag = `<time>${d.toISOString()}</time>`;
+                // 處理台灣格式 2024/1/1 下午... 或是 2024-01-01...
+                const normalizedDate = w.localTime.replace(/\//g, '-').replace(/上午|下午/g, '');
+                const d = new Date(normalizedDate);
+                if (!isNaN(d.getTime())) timeTag = `<time>${d.toISOString()}</time>`;
             } catch(e) {}
         }
 
@@ -3613,14 +3656,13 @@ window.exportGpx = function(index) {
 
     gpx += `\n</gpx>`;
 
-    // 4. 執行下載
+    // 6. 執行下載
     try {
         const blob = new Blob([gpx], { type: 'application/gpx+xml' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         const safeName = trackName.replace(/[/\\?%*:|"<>]/g, '-');
-        // 確保副檔名正確
         const fileName = safeName.toLowerCase().endsWith('.gpx') ? safeName : `${safeName}.gpx`;
         a.download = fileName;
         document.body.appendChild(a);
@@ -3629,5 +3671,37 @@ window.exportGpx = function(index) {
         URL.revokeObjectURL(url);
     } catch (err) {
         console.error("匯出失敗:", err);
+        alert("匯出失敗，請查看控制台");
+    }
+};
+
+window.renameSubRoute = function(idx) {
+    const targetRoute = allTracks[idx];
+    if (!targetRoute) return;
+
+    const oldName = targetRoute.name;
+    const newName = prompt("請輸入新的路線名稱：", oldName);
+
+    if (newName !== null && newName.trim() !== "" && newName !== oldName) {
+        const finalName = newName.trim();
+        
+        // 1. 修改當前顯示的 allTracks (畫面立刻變)
+        targetRoute.name = finalName;
+
+        // 2. ✅ 核心：存入 multiGpxStack 筆記本，確保切換檔案不失憶
+        if (window.multiGpxStack && window.multiGpxStack[window.currentMultiIndex]) {
+            const data = window.multiGpxStack[window.currentMultiIndex];
+            if (!data.customRouteNames) data.customRouteNames = {};
+            data.customRouteNames[idx] = finalName;
+        }
+
+        // 3. 更新下拉選單文字
+        const routeSelect = document.getElementById("routeSelect");
+        if (routeSelect && routeSelect.options[idx]) {
+            routeSelect.options[idx].text = finalName;
+        }
+
+        // 4. 重新刷新顯示
+        renderRouteInfo();
     }
 };
