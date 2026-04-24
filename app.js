@@ -2798,15 +2798,15 @@ function renderMultiGpxButtons() {
         gpxManagerControlContainer.innerHTML = `
             <a href="#" title="管理 GPX 顯示" style="
                 background-color: white; 
-                width: 45px; 
-                height: 45px; 
+                width: 35px; 
+                height: 35px; 
                 display: flex; 
                 align-items: center; 
                 justify-content: center; 
                 text-decoration: none; 
                 color: #333;
             ">
-                <span class="material-icons" style="font-size: 30px;">layers</span>
+                <span class="material-icons" style="font-size: 25px;">layers</span>
             </a>
         `;
 
@@ -3836,19 +3836,19 @@ const searchControl = L.control({ position: 'topright' });
 searchControl.onAdd = function() {
     const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
     
-    // 容器樣式參考 GPX 管理介面，寬高 45x45
+ 
     container.innerHTML = `
         <a href="#" title="搜尋地點" style="
             background-color: white; 
-            width: 45px; 
-            height: 45px; 
+            width: 35px; 
+            height: 35px; 
             display: flex; 
             align-items: center; 
             justify-content: center; 
             text-decoration: none; 
             color: #333;
         ">
-            <span class="material-icons" style="font-size: 28px;">search</span>
+            <span class="material-icons" style="font-size: 22px;">search</span>
         </a>
     `;
 

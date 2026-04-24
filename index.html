@@ -663,6 +663,24 @@
 #searchControlContainer a {
     border: none !important;
 }
+/* 調整圖層選擇器的外框大小 */
+.leaflet-control-layers-toggle {
+    width: 35px !important;  /* 外框寬度改為 35px */
+    height: 35px !important; /* 外框高度改為 35px */
+    background-size: 25px 25px !important; /* 內部圖層圖示改為 22px */
+    background-position: center !important; /* 確保圖示置中 */
+}
+
+/* 為了美觀，調整右側控制項的間距與對齊 */
+.leaflet-top.leaflet-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.leaflet-control {
+    margin-right: 10px !important;
+}
   </style>
 </head>
 
