@@ -20,6 +20,17 @@ const rudy = L.tileLayer(
     opacity: 0.5   // 👈 疊圖透明度
   }
 );
+
+// 魯地圖（疊圖）
+const rudyM = L.tileLayer(
+  "https://tile.happyman.idv.tw/map/moi_osm/{z}/{x}/{y}.png",
+  {
+    maxZoom: 18,
+    attribution: "Rudy Map",
+    opacity: 0.5   // 👈 疊圖透明度
+  }
+);
+
 const mapDiv = document.getElementById('map');
 const rsContainer = document.getElementById('routeSelectContainer');
 mapDiv.appendChild(rsContainer); // 強行塞回地圖內，但這是在 Leaflet 初始化之後做的
@@ -45,12 +56,13 @@ let gridLayers = {
 // --- 地圖初始化部分的圖層控制 ---
 const baseMaps = { 
     "標準地圖 (OSM)": osm, 
-    "魯地圖 (等高線)": rudy,    
+    "魯地圖 (等高線)": rudyM,    
     "等高線地形圖 (OpenTopo)": otm,
     "內政部臺灣通用電子地圖": emap 
 };
 
 const overlayMaps = {
+	  "魯地圖疊圖": rudy,
 		"Happyman疊圖": happyman, 
     "WGS84 格線": gridLayers.WGS84,
     "TWD97 格線": gridLayers.TWD97,
@@ -1456,54 +1468,71 @@ window.copyText = function(id) {
 
 function showCustomPopup(idx, title, offPathEle = null, realLat = null, realLon = null) {
   const isWaypoint = (realLat !== null && realLon !== null);
-  if (!isWaypoint && (!trackPoints || !trackPoints[idx])) return;
-
-  const p = trackPoints[idx] || {}; 
-  const lat = isWaypoint ? realLat : p.lat;
-  const lon = isWaypoint ? realLon : p.lon;
-  const ele = offPathEle || (p.ele ? p.ele.toFixed(0) : "---");
   
-  const dist = (p.distance !== undefined) ? p.distance.toFixed(2) : null;
+  // 1. 定義座標
+  const lat = isWaypoint ? realLat : (trackPoints[idx] ? trackPoints[idx].lat : null);
+  const lon = isWaypoint ? realLon : (trackPoints[idx] ? trackPoints[idx].lon : null);
 
-  let waypointTime = null;
-  let waypointIdx = -1; 
-  const activeIdx = window.currentActiveIndex || 0;
-  // ✅ 修正：確保 currentGpx 指向正確的資料源
-  const currentGpx = (window.allTracks && window.allTracks[activeIdx]) ? window.allTracks[activeIdx] : null;
+  // 2. ✅ 【關鍵修正】校準索引與數據
+  // 如果是新增航點且 idx 無效，我們要在 trackPoints 裡掃描最接近的點，把高度、距離、時間「偷」過來
+  let effectiveIdx = idx;
+  let matchedPoint = (trackPoints && trackPoints[idx]) ? trackPoints[idx] : null;
 
-  if (currentGpx && currentGpx.waypoints) {
-      // ✅ 修正：放寬座標比對精度 (從 0.000001 改為 0.00001)，避免浮點數誤差
-      waypointIdx = currentGpx.waypoints.findIndex(w => 
-          Math.abs(w.lat - lat) < 0.00001 && Math.abs(w.lon - lon) < 0.00001
+  if (isWaypoint && (!matchedPoint || idx === 999999)) {
+      // 遍歷軌跡尋找最近的點 (容許度設為 0.0001)
+      const foundIdx = trackPoints.findIndex(tp => 
+          Math.abs(tp.lat - lat) < 0.0001 && Math.abs(tp.lon - lon) < 0.0001
       );
-      
-      if (waypointIdx !== -1) {
-          const wptData = currentGpx.waypoints[waypointIdx];
-          // ✅ 修正：優先順序 localTime -> time -> 回退值
-          if (wptData.localTime && wptData.localTime !== "無時間資訊") {
-              waypointTime = wptData.localTime;
-          } else if (wptData.time) {
-              // 如果只有 ISO 時間，轉成本地格式
-              waypointTime = new Date(wptData.time).toLocaleString();
-          }
+      if (foundIdx !== -1) {
+          effectiveIdx = foundIdx;
+          matchedPoint = trackPoints[foundIdx];
       }
   }
 
-  // ✅ 修正：定義最終顯示在彈窗視窗的時間字串
-  // 如果是手動新增點，p.timeLocal 會是 undefined，所以必須依賴上面的 waypointTime
-  const displayTime = waypointTime || p.timeLocal || '---';
+  // 3. ✅ 重新設定顯示資訊
+  // 高度：優先用傳入的，其次用比對到的軌跡點，最後才顯示 ---
+  const ele = offPathEle || (matchedPoint && matchedPoint.ele ? matchedPoint.ele.toFixed(0) : "---");
+  // 距離：從比對到的軌跡點抓取
+  const dist = (matchedPoint && matchedPoint.distance !== undefined) ? matchedPoint.distance.toFixed(2) : null;
+
+  // 4. 時間處理 (維持你原本的優先順序)
+  let waypointTime = null;
+  let waypointIdx = -1; 
+  const activeIdx = window.currentActiveIndex || 0;
+  const currentGpx = (window.allTracks && window.allTracks[activeIdx]) ? window.allTracks[activeIdx] : null;
+
+  if (currentGpx && currentGpx.waypoints) {
+      waypointIdx = currentGpx.waypoints.findIndex(w => 
+          Math.abs(w.lat - lat) < 0.00005 && Math.abs(w.lon - lon) < 0.00005
+      );
+      if (waypointIdx !== -1) {
+          const wptData = currentGpx.waypoints[waypointIdx];
+          waypointTime = wptData.localTime || (wptData.time ? new Date(wptData.time).toLocaleString() : null);
+      }
+  }
+
+  // ✅ 時間顯示優先：航點紀錄時間 > 軌跡點時間 > 目前時間(保底)
+  const displayTime = waypointTime || (matchedPoint ? matchedPoint.timeLocal : null) || new Date().toLocaleString();
+
+  // 5. ✅ 修改「不在路徑上」的判斷邏輯
+  // 只有當我們連比對都比對不到任何軌跡點時，才顯示警告
+  const isActuallyOffPath = (offPathEle !== null && effectiveIdx === 999999);
 
   // 編輯按鈕
-  const editIcon = `<span class="material-icons" style="font-size:16px; cursor:pointer; vertical-align:middle; margin-left:4px; color:#1a73e8;" onclick="handleWptEdit(${waypointIdx !== -1 ? waypointIdx : 'null'}, ${lat}, ${lon}, ${ele}, '${title}', '${displayTime}', ${idx})">edit</span>`;
+  const editIcon = `<span class="material-icons" style="font-size:16px; cursor:pointer; vertical-align:middle; margin-left:4px; color:#1a73e8;" onclick="handleWptEdit(${waypointIdx !== -1 ? waypointIdx : 'null'}, ${lat}, ${lon}, ${ele}, '${title}', '${displayTime}', ${effectiveIdx})">edit</span>`;
 
-  const gUrl = `https://www.google.com/maps?q=${lat},${lon}`;
+  // ✅ 修正 A B 按鈕傳遞的參數
+  const abButtons = `
+    <div style="display:flex; margin-top:10px; gap:5px;">
+      <button onclick="setAB('A', ${effectiveIdx}, ${lat}, ${lon})" style="flex:1; background:#007bff; color:white; border:none; padding:6px; border-radius:4px; cursor:pointer; font-weight:bold;">設定 A</button>
+      <button onclick="setAB('B', ${effectiveIdx}, ${lat}, ${lon})" style="flex:1; background:#e83e8c; color:white; border:none; padding:6px; border-radius:4px; cursor:pointer; font-weight:bold;">設定 B</button>
+    </div>`;
+
+  // (其餘 TWD97 轉換與 Popup 渲染代碼不變...)
+  const gUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
   const gMapIconBtn = `<a href="${gUrl}" target="_blank" style="text-decoration:none; margin-right:8px; display:inline-flex; align-items:center; justify-content:center; width: 28px; height: 28px; background: #fff; border: 1px solid #ccc; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); vertical-align: middle;"><img src="https://ychiking.github.io/gpx-online-viewer/GoogleMaps.png" style="width:18px; height:18px;" alt="GMap"></a>`;
-  const abButtons = `<div style="display:flex; margin-top:10px; gap:5px;"><button onclick="setAB('A', ${idx}, ${lat}, ${lon})" style="flex:1; background:#007bff; color:white; border:none; padding:6px; border-radius:4px; cursor:pointer; font-weight:bold;">設定 A</button><button onclick="setAB('B', ${idx}, ${lat}, ${lon})" style="flex:1; background:#e83e8c; color:white; border:none; padding:6px; border-radius:4px; cursor:pointer; font-weight:bold;">設定 B</button></div>`;
-
   const twd97 = proj4(WGS84_DEF, TWD97_DEF, [lon, lat]);
   const twd67 = proj4(WGS84_DEF, TWD67_DEF, [lon, lat]);
-
-  const isActuallyOffPath = (offPathEle !== null && idx !== 999999);
 
   let content = `
     <div style="min-width:180px; font-size:13px; line-height:1.6;">
@@ -1765,33 +1794,39 @@ window.focusWaypoint = function(lat, lon, name, distToTrack = 0, ele = null) {
 window.setAB = function(type, idx, forcedLat = null, forcedLon = null) {
   let lat, lon, targetPoint;
   
-  // 1. 取得座標邏輯
+  // ✅ 核心修正：明確定義什麼是「非原始軌跡點」
+  const isManualPoint = (idx === -1 || idx === 999999);
+
+  // 1. 取得座標與建立點資料
   if (forcedLat !== null && forcedLon !== null) {
-    // ✅ 優先使用傳入的精確座標 (航點原始座標)
+    // 點擊新增航點後的位置 (由 Popup 傳入座標)
     lat = forcedLat;
     lon = forcedLon;
     
-    // 同時保留索引資訊，以便計算 A-B 之間的距離與時間
-    if (trackPoints && trackPoints[idx]) {
+    // 如果是 999999，我們只借用它的高度，而不繼承它的里程和時間
+    if (trackPoints && trackPoints[idx] && !isManualPoint) {
       targetPoint = { ...trackPoints[idx], lat, lon, idx }; 
     } else {
-      targetPoint = { lat, lon, idx, ele: 0 };
+      // ✅ 針對手動航點：保證不帶有 distance 和 timeUTC 屬性，避免 updateABUI 算錯
+      const eleValue = (trackPoints[idx]) ? trackPoints[idx].ele : 0;
+      targetPoint = { lat, lon, idx, ele: eleValue };
     }
-  } else if (trackPoints && trackPoints[idx]) {
-    // 從高度表或軌跡點點擊時
+  } else if (trackPoints && trackPoints[idx] && !isManualPoint) {
+    // 從高度表或原始軌跡點點擊
     targetPoint = { ...trackPoints[idx], idx };
     lat = targetPoint.lat;
     lon = targetPoint.lon;
   } else if (hoverMarker) {
+    // 地圖自由點擊 (未新增航點前)
     const pos = hoverMarker.getLatLng();
     lat = pos.lat;
     lon = pos.lng;
-    targetPoint = { lat, lon, idx, ele: 0 };
+    targetPoint = { lat, lon, idx: -1, ele: 0 };
   } else {
     return;
   }
 
-  // 2. 設定 A 或 B 點
+  // 2. 設定 A 或 B 點 (維持原本 Marker 邏輯)
   if (type === 'A') {
     pointA = targetPoint;
     if (markerA) map.removeLayer(markerA);
@@ -1817,8 +1852,20 @@ window.setAB = function(type, idx, forcedLat = null, forcedLon = null) {
 };
 
 function updateABUI() {
-    const infoA = document.getElementById("infoA"), infoB = document.getElementById("infoB"), boxRes = document.getElementById("boxRes"), infoRes = document.getElementById("infoRes");
+    const infoA = document.getElementById("infoA"), 
+          infoB = document.getElementById("infoB"), 
+          boxRes = document.getElementById("boxRes"), 
+          infoRes = document.getElementById("infoRes");
     
+    // 統一時間格式化函式: 2026-04-18 09:54:11
+    const formatDateTime = (date) => {
+        if (!date) return "";
+        const d = new Date(date);
+        if (isNaN(d.getTime())) return date; // 如果已經是字串則直接回傳
+        const pad = (num) => String(num).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    };
+
     const getCoordHTML = (p) => {
         const twd97 = proj4(WGS84_DEF, TWD97_DEF, [p.lon, p.lat]);
         const twd67 = proj4(WGS84_DEF, TWD67_DEF, [p.lon, p.lat]);
@@ -1827,41 +1874,41 @@ function updateABUI() {
                 TWD67: ${Math.round(twd67[0])}, ${Math.round(twd67[1])}`;
     };
 
-    // --- 更新 A 點資訊顯示 ---
-// --- 更新 A 點資訊顯示 ---
+    // --- 更新 A 點資訊 ---
     if (pointA) {
         let html = getCoordHTML(pointA);
-        // ✅ 修正：除了檢查 idx，也要確保屬性存在才能用 toFixed
-        if (pointA.idx !== -1 && pointA.ele !== undefined && pointA.distance !== undefined) {
-            html += `<br><span style="color:#666;">高度: ${pointA.ele.toFixed(0)}m, 里程: ${pointA.distance.toFixed(2)}km, ${pointA.timeLocal || ""}</span>`;
+        // ✅ 修正：只要是 999999 或 -1，就視為手動點，不顯示里程
+        const isRealOnPathA = (pointA.idx !== -1 && pointA.idx !== 999999);
+        const timeStr = pointA.timeUTC ? formatDateTime(pointA.timeUTC) : (pointA.timeLocal || "");
+
+        if (isRealOnPathA && pointA.ele !== undefined && pointA.distance !== undefined) {
+            html += `<br><span style="color:#666;">高度: ${pointA.ele.toFixed(0)}m, 里程: ${pointA.distance.toFixed(2)}km, ${timeStr}</span>`;
         } else if (pointA.ele !== undefined) {
-            // 如果是純航點但有高度資訊
-            html += `<br><span style="color:#666;">高度: ${pointA.ele.toFixed(0)}m</span>`;
+            html += `<br><span style="color:#666;">高度: ${pointA.ele.toFixed(0)}m, ${timeStr}</span>`;
         }
         infoA.innerHTML = html;
-    } else {
-        infoA.innerHTML = "尚未設定";
-    }
+    } else { infoA.innerHTML = "尚未設定"; }
 
-    // --- 更新 B 點資訊顯示 ---
+    // --- 更新 B 點資訊 ---
     if (pointB) {
         let html = getCoordHTML(pointB);
-        // ✅ 修正：同上，加入安全檢查
-        if (pointB.idx !== -1 && pointB.ele !== undefined && pointB.distance !== undefined) {
-            html += `<br><span style="color:#666;">高度: ${pointB.ele.toFixed(0)}m, 里程: ${pointB.distance.toFixed(2)}km, ${pointB.timeLocal || ""}</span>`;
+        const isRealOnPathB = (pointB.idx !== -1 && pointB.idx !== 999999);
+        const timeStr = pointB.timeUTC ? formatDateTime(pointB.timeUTC) : (pointB.timeLocal || "");
+
+        if (isRealOnPathB && pointB.ele !== undefined && pointB.distance !== undefined) {
+            html += `<br><span style="color:#666;">高度: ${pointB.ele.toFixed(0)}m, 里程: ${pointB.distance.toFixed(2)}km, ${timeStr}</span>`;
         } else if (pointB.ele !== undefined) {
-            html += `<br><span style="color:#666;">高度: ${pointB.ele.toFixed(0)}m</span>`;
+            html += `<br><span style="color:#666;">高度: ${pointB.ele.toFixed(0)}m, ${timeStr}</span>`;
         }
         infoB.innerHTML = html;
-    } else {
-        infoB.innerHTML = "尚未設定";
-    }
+    } else { infoB.innerHTML = "尚未設定"; }
 
     // --- 區間分析邏輯 ---
     if (pointA && pointB) {
         boxRes.style.display = "block";
         const bearing = getBearingInfo(pointA.lat, pointA.lon, pointB.lat, pointB.lon);
         
+        // 直線距離計算
         const R = 6371; 
         const dLat = (pointB.lat - pointA.lat) * Math.PI / 180;
         const dLon = (pointB.lon - pointA.lon) * Math.PI / 180;
@@ -1872,46 +1919,36 @@ function updateABUI() {
         const directDist = R * c;
 
         let analysisContent = "";
-
-        // 判斷是否兩點都在路徑上 (idx 不等於 -1 代表是在路徑上)
-        const isBothOnPath = (pointA.idx !== -1 && pointB.idx !== -1);
         let slopeText = "";
 
-				if (isBothOnPath) {
-            // 兩點都在路徑上，計算平均坡度
-            const hDiff = pointB.ele - pointA.ele; // 高度差
-            const dDiff = Math.abs(pointB.distance - pointA.distance) * 1000; // 沿路距離(公尺)
-            
+        // ✅ 修正：定義「真正的路徑分析」條件
+        // 只要任一端是 -1 或 999999，isBothRealOnPath 就會是 false
+        const isBothRealOnPath = (pointA.idx !== -1 && pointA.idx !== 999999 && 
+                                  pointB.idx !== -1 && pointB.idx !== 999999);
+
+        if (isBothRealOnPath) {
+            const hDiff = pointB.ele - pointA.ele;
+            const dDiff = Math.abs(pointB.distance - pointA.distance) * 1000;
             if (dDiff > 0) {
                 const slope = (hDiff / dDiff) * 100;
-                // 計算角度：arctan(高度差 / 距離) 轉為角度
                 const angle = Math.atan(hDiff / dDiff) * (180 / Math.PI);
-                
                 const absSlope = Math.abs(slope).toFixed(1);
                 const absAngle = Math.abs(angle).toFixed(1);
-                
-                if (slope > 0) {
-                    // 上坡：橘紅色
-                    slopeText = `<br>平均坡度：<b style="color:#d35400;">${absSlope} % (${absAngle}°) (上坡)</b>`;
-                } else if (slope < 0) {
-                    // 下坡：綠色
-                    slopeText = `<br>平均坡度：<b style="color:#28a745;">${absSlope} % (${absAngle}°) (下坡)</b>`;
-                } else {
-                    slopeText = `<br>平均坡度：<b>0.0 % (0.0°)</b>`;
-                }
-            } else {
-                slopeText = `<br>平均坡度：<b>0.0 % (0.0°)</b>`;
+                if (slope > 0) slopeText = `<br>平均坡度：<b style="color:#d35400;">${absSlope} % (${absAngle}°) (上坡)</b>`;
+                else if (slope < 0) slopeText = `<br>平均坡度：<b style="color:#28a745;">${absSlope} % (${absAngle}°) (下坡)</b>`;
+                else slopeText = `<br>平均坡度：<b>0.0 % (0.0°)</b>`;
             }
         }
 
-        if (pointA.idx === -1 || pointB.idx === -1) {
-            // --- 狀況 1: 直線分析 ---
+        // ✅ 關鍵修正：進入直線分析的判斷式
+        if (!isBothRealOnPath) {
+            // --- 狀況 1: 直線分析 (路徑 + 新增航點 會進這裡) ---
             analysisContent = `
                 <div style="color:#d35400; font-weight:bold; margin-bottom:4px;">📍 直線分析 (非全路徑點)</div>
                 直線距離：<b>${directDist.toFixed(2)} km</b>${slopeText}<br>
                 移動方位：<span style="color:#007bff; font-weight:bold;">往 ${bearing.name} (${bearing.deg}°)</span>`;
         } else {
-            // --- 狀況 2: 沿路區間分析 ---
+            // --- 狀況 2: 沿路區間分析 (真正的 GPX 點) ---
             const start = Math.min(pointA.idx, pointB.idx), end = Math.max(pointA.idx, pointB.idx);
             const section = trackPoints.slice(start, end + 1);
             const { gain, loss } = calculateElevationGainFiltered(section);
@@ -1963,6 +2000,7 @@ function updateABUI() {
         if (typeof markerB !== 'undefined' && markerB) { markerB.unbindTooltip(); }
     }
     
+    // 如果兩端都是真正的非路徑點，觸發路徑分析功能
     if (pointA && pointB && pointA.idx === -1 && pointB.idx === -1) {
         if (typeof analyzeBestPath === 'function') {
             analyzeBestPath(pointA.lat, pointA.lon, pointB.lat, pointB.lon);
@@ -3390,161 +3428,197 @@ window.toggleColorPicker = function(i) {
     }
 };
 
+let currentEditTask = null;
+
 window.handleWptEdit = function(existingIdx, lat, lon, ele, oldName, timeStr, originalIdx) {
-    // 1. 初始化資料結構
+    // --- 原本的資料結構初始化 (保持不變) ---
     if (typeof window.currentMultiIndex === 'undefined') window.currentMultiIndex = 0;
     let stackIdx = window.currentMultiIndex;
-    
     if (typeof multiGpxStack === 'undefined' || !multiGpxStack) window.multiGpxStack = [];
-
-    // ✅ 如果目前是全空，強行建立第一個數據容器
     if (!multiGpxStack[stackIdx]) {
-        multiGpxStack[stackIdx] = { 
-            name: "手動新增航點", 
-            points: [], 
-            waypoints: [], 
-            stats: { totalDistance: 0, totalElevation: 0 },
-            isCombined: false 
-        };
+        multiGpxStack[stackIdx] = { name: "手動新增航點", points: [], waypoints: [], stats: { totalDistance: 0, totalElevation: 0 }, isCombined: false };
     }
-
-    // ✅ 確保 allTracks 不是空的 (列表渲染依賴此變數)
     if (typeof allTracks === 'undefined' || !allTracks || allTracks.length === 0) {
         window.allTracks = [multiGpxStack[stackIdx]];
     }
-
     let activeIdx = window.currentActiveIndex || 0;
     if (!allTracks[activeIdx]) activeIdx = 0;
 
-    const newName = prompt("請輸入航點名稱：", oldName);
-    if (newName === null) return; 
-    const finalName = newName.trim() === "" ? oldName : newName.trim();
+    // --- Modal 處理邏輯 ---
+    const modal = document.getElementById('wptEditModal');
+    const nameInput = document.getElementById('modalWptName');
+    const eleInput = document.getElementById('modalWptEle');
+    const confirmBtn = document.getElementById('modalWptConfirm');
 
-    // 內建格式化工具，確保在任何情況下都能產生時間字串
-    const getNowStr = () => {
-        const d = new Date();
-        return d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate() + " " + 
-               d.getHours().toString().padStart(2, '0') + ":" + 
-               d.getMinutes().toString().padStart(2, '0') + ":" + 
-               d.getSeconds().toString().padStart(2, '0');
+    nameInput.value = oldName || "";
+    eleInput.value = (ele !== null && ele !== "---") ? ele : 0;
+    modal.style.display = 'flex';
+
+    // ✅ 自動聚焦到名稱輸入框
+    setTimeout(() => nameInput.focus(), 100);
+
+    // 儲存參數
+    currentEditTask = { existingIdx, lat, lon, ele, oldName, timeStr, originalIdx, stackIdx, activeIdx };
+
+    // ✅ 新增：Enter 鍵支援函式
+    const handleEnterKey = (e) => {
+        if (e.key === "Enter" || e.keyCode === 13) {
+            e.preventDefault();
+            confirmBtn.click(); // 觸發下方的 onclick 邏輯
+        }
     };
+
+    // 綁定鍵盤事件到兩個輸入框
+    nameInput.onkeydown = handleEnterKey;
+    eleInput.onkeydown = handleEnterKey;
+
+    // 綁定確認按鈕
+    confirmBtn.onclick = function() {
+        const finalName = nameInput.value.trim() || "未命名航點";
+        const finalEle = eleInput.value;
+
+        // 執行存檔邏輯
+        processSave(finalName, finalEle);
+        
+        modal.style.display = 'none';
+
+        // ✅ 清除監聽避免干擾
+        nameInput.onkeydown = null;
+        eleInput.onkeydown = null;
+    };
+};
+
+// 這是從你原本程式碼拆出來的後半段存檔邏輯
+function processSave(finalName, finalEle) {
+    const { existingIdx, lat, lon, timeStr, originalIdx, stackIdx, activeIdx } = currentEditTask;
+
+    // ✅ 修正 1：統一格式化函式，確保輸出為 YYYY-MM-DD HH:mm:ss
+    const formatToStandard = (dateInput) => {
+        const d = new Date(dateInput);
+        if (isNaN(d.getTime())) return dateInput; 
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    };
+
+    const getNowStr = () => formatToStandard(new Date());
 
     let targetWpt;
     if (existingIdx !== null && existingIdx !== -1 && multiGpxStack[stackIdx].waypoints[existingIdx]) {
-        // 編輯模式
         multiGpxStack[stackIdx].waypoints[existingIdx].name = finalName;
+        multiGpxStack[stackIdx].waypoints[existingIdx].ele = parseFloat(finalEle);
         targetWpt = multiGpxStack[stackIdx].waypoints[existingIdx];
     } else {
-        // ✅ 新增模式：確保 time 與 localTime 都有值
         targetWpt = { 
-            lat, lon, 
-            name: finalName, 
-            isCustom: true,
-            belongsToRoute: activeIdx,
-            time: new Date().toISOString(),
-            localTime: getNowStr() // 👈 這裡確保了列表會顯示時間
+            lat, lon, name: finalName, isCustom: true, belongsToRoute: activeIdx,
+            time: new Date().toISOString(), 
+            localTime: getNowStr(), // 使用新的格式
+            ele: parseFloat(finalEle) || 0
         };
         
-        targetWpt.ele = (ele !== null && ele !== "---" && ele !== undefined) ? parseFloat(ele) : 0;
-
-        // 如果是點轉航點，嘗試保留原時間
         if (originalIdx !== null && originalIdx !== undefined && timeStr) {
-            targetWpt.time = timeStr;
-            try {
-                const d = new Date(timeStr);
-                if (!isNaN(d.getTime())) {
-                    targetWpt.localTime = (typeof formatDate === 'function') ? formatDate(d) : getNowStr();
-                }
-            } catch(e) {}
+            // ✅ 修正 2：繼承舊時間時也強制格式化，避免斜線格式流進來
+            const formattedTime = formatToStandard(timeStr);
+            targetWpt.time = formattedTime;
+            targetWpt.localTime = formattedTime;
         }
-        
         multiGpxStack[stackIdx].waypoints.push(targetWpt);
     }
 
-    // 2. 同步資料 (這步很重要，確保 allTracks 的內容跟 stack 一致)
-    allTracks.forEach(track => {
-        track.waypoints = multiGpxStack[stackIdx].waypoints;
-    });
-
-    // 3. ✅ 強制顯示列表容器
-    // 在沒有 GPX 時，你的 CSS 可能把存放列表的 div 隱藏了，這裡把它打開
-    const wptSection = document.getElementById("waypointSection"); // 假設你的航點列表容器叫這個
-    if (wptSection) wptSection.style.display = "block";
-
-    // 4. 更新 UI
+    // 更新列表與地圖 (保留原本邏輯)
+    allTracks.forEach(track => { track.waypoints = multiGpxStack[stackIdx].waypoints; });
     try {
-        if (typeof updateWptTable === 'function') {
-            updateWptTable(); 
-        }
-        // 如果有 render 函式也跑一下
-        if (typeof renderWaypointsAndPeaks === 'function') {
-            renderWaypointsAndPeaks(allTracks[activeIdx]);
-        }
-    } catch (e) {
-        console.log("列表更新中...", e);
-    }
+        if (typeof updateWptTable === 'function') updateWptTable();
+        if (typeof renderWaypointsAndPeaks === 'function') renderWaypointsAndPeaks(allTracks[activeIdx]);
+    } catch (e) {}
 
-    // 5. 地圖圖層處理
-    if (existingIdx === null || existingIdx === -1) {
+    // 地圖 Marker 處理
+    if (existingIdx !== null && existingIdx !== -1) {
+        // 修改舊點：最好的做法是刷新整條路線的 Marker，避免重疊
+        if (typeof loadRoute === 'function') {
+            loadRoute(activeIdx); 
+        }
+    } else {
+        // 新增點：先檢查是否已經有 Marker 陣列，並確保它被管理
         const marker = L.marker([lat, lon], { 
             icon: (typeof wptIcon !== 'undefined' ? wptIcon : new L.Icon.Default()) 
         }).addTo(map);
 
-        // 綁定名稱
         marker.bindTooltip(finalName, { 
-            permanent: (typeof showWptNameAlways !== 'undefined' ? showWptNameAlways : false), // 如果目前是「顯示名稱」模式，就設為永久顯示
-            direction: 'top', 
-            offset: [0, -10] 
+            permanent: (typeof showWptNameAlways !== 'undefined' ? showWptNameAlways : false), 
+            direction: 'top', offset: [0, -10] 
         });
 
-        // ✅ 關鍵修正：如果全域設定是顯示名稱，新增完立刻把它打開
-        if (typeof showWptNameAlways !== 'undefined' && showWptNameAlways) {
-            marker.openTooltip();
-        }
+        if (window.showWptNameAlways) marker.openTooltip();
 
         marker.on('click', (e) => {
             L.DomEvent.stopPropagation(e);
-            if (typeof showCustomPopup === 'function') {
-                showCustomPopup(null, finalName, null, lat, lon);
-            }
+            showCustomPopup(null, finalName, finalEle, lat, lon);
         });
 
-        if (typeof wptMarkers !== 'undefined') wptMarkers.push(marker);
+        if (typeof wptMarkers !== 'undefined') {
+            wptMarkers.push(marker);
+        }
     }
+    
+    setTimeout(() => { showCustomPopup(null, finalName, finalEle, lat, lon); }, 200);
+}
+window.deleteWaypoint = function(idx) {
+    const modal = document.getElementById('deleteConfirmModal');
+    
+    if (!modal) {
+        console.error("❌ 錯誤：找不到 id 為 'deleteConfirmModal' 的 HTML 元素！");
+        return;
+    }
+    const confirmBtn = document.getElementById('modalDeleteConfirm');
+    const cancelBtn = document.getElementById('modalDeleteCancel');
 
-    setTimeout(() => { 
-        if (typeof showCustomPopup === 'function') 
-            showCustomPopup(null, finalName, null, lat, lon); 
-    }, 200);
+    // 1. 顯示視窗
+    modal.style.display = 'flex';
+
+    // 2. 綁定「確定刪除」按鈕
+    confirmBtn.onclick = function() {
+        executeDelete(idx);
+        modal.style.display = 'none';
+    };
+
+    // 3. 綁定「取消」按鈕
+    cancelBtn.onclick = function() {
+ 
+        modal.style.display = 'none';
+    };
+
 };
 
-window.deleteWaypoint = function(idx) {
-    if (!confirm("確定要刪除此航點嗎？")) return;
-    
+// 實際執行刪除的函式 (包含原本所有的同步與渲染邏輯)
+function executeDelete(idx) {
     const stackIdx = (typeof window.currentMultiIndex !== 'undefined') ? window.currentMultiIndex : 0;
     const currentStackItem = multiGpxStack[stackIdx];
 
     if (!currentStackItem || !currentStackItem.waypoints) return;
 
-    // 1. 從 Stack 刪除
+    // 執行刪除
     currentStackItem.waypoints.splice(idx, 1);
 
-    // 2. ✅ 同步到所有 allTracks (子路線)
+    // 同步到 allTracks
     if (typeof allTracks !== 'undefined' && Array.isArray(allTracks)) {
         allTracks.forEach(track => {
             track.waypoints = currentStackItem.waypoints;
         });
     }
 
-    // 3. 重新渲染
-    renderWaypointsAndPeaks(allTracks[window.currentActiveIndex || 0]);
+    // 重新渲染航點列表
+    if (typeof renderWaypointsAndPeaks === 'function') {
+        renderWaypointsAndPeaks(allTracks[window.currentActiveIndex || 0]);
+    }
 
-    // 4. 強制地圖刷新
+    // 重新整理地圖上的圖層
     if (typeof loadRoute === 'function') {
         loadRoute(window.currentActiveIndex || 0); 
     }
+    
+    // 關閉目前開啟中的 Popup
     if (typeof currentPopup !== 'undefined' && currentPopup) map.closePopup();
-};
+}
 
 // 確保這段程式碼在 app.js 的最頂層或最末端（非內部函式）
 window.downloadCounters = window.downloadCounters || {};
@@ -3624,23 +3698,45 @@ window.exportGpx = function(index) {
     // 5. 處理航點 (Waypoints)
     // 優先順序：目前選中的航點 > 第一條路線的航點 > Stack 裡的航點
     let wpts = [];
-    if (hasWaypoints) {
-        wpts = currentRoute.waypoints;
-    } else if (fallbackWaypoints && fallbackWaypoints.length > 0) {
-        wpts = fallbackWaypoints;
-    } else if (item && item.waypoints) {
-        wpts = item.waypoints;
+    
+    // 如果是結合版，我們需要蒐集「所有子路線」的航點，但要排除重複
+    if (currentRoute && currentRoute.isCombined) {
+        allTracks.forEach(t => {
+            if (t.waypoints && t.waypoints.length > 0) {
+                wpts = wpts.concat(t.waypoints);
+            }
+        });
+    } else {
+        // 一般模式：照舊
+        if (hasWaypoints) {
+            wpts = currentRoute.waypoints;
+        } else if (fallbackWaypoints && fallbackWaypoints.length > 0) {
+            wpts = fallbackWaypoints;
+        } else if (item && item.waypoints) {
+            wpts = item.waypoints;
+        }
     }
 
+    // --- ✅ 關鍵修正：使用 Map 過濾重複點 (以 座標+名稱 為 key) ---
+    const uniqueWptsMap = new Map();
     wpts.forEach(w => {
+        // 建立唯一識別碼，防止座標與名稱完全相同的點重複匯出
+        const key = `${w.lat}_${w.lon}_${w.name}`;
+        if (!uniqueWptsMap.has(key)) {
+            uniqueWptsMap.set(key, w);
+        }
+    });
+
+    // 只迭代不重複的航點
+    uniqueWptsMap.forEach((w) => {
         let timeTag = "";
+        // ... 原本的 timeTag 處理邏輯 ...
         if (w.time) {
             timeTag = `<time>${w.time}</time>`;
         } else if (w.timeUTC) {
             timeTag = `<time>${new Date(w.timeUTC).toISOString()}</time>`;
         } else if (w.localTime && w.localTime !== "無時間資訊") {
             try {
-                // 處理台灣格式 2024/1/1 下午... 或是 2024-01-01...
                 const normalizedDate = w.localTime.replace(/\//g, '-').replace(/上午|下午/g, '');
                 const d = new Date(normalizedDate);
                 if (!isNaN(d.getTime())) timeTag = `<time>${d.toISOString()}</time>`;
@@ -3679,29 +3775,57 @@ window.renameSubRoute = function(idx) {
     const targetRoute = allTracks[idx];
     if (!targetRoute) return;
 
+    const modal = document.getElementById('renameModal');
+    const input = document.getElementById('modalRouteName');
+    const confirmBtn = document.getElementById('modalRouteConfirm');
+
+    if (!modal || !input || !confirmBtn) return;
+
     const oldName = targetRoute.name;
-    const newName = prompt("請輸入新的路線名稱：", oldName);
+    input.value = oldName;
+    modal.style.display = 'flex';
 
-    if (newName !== null && newName.trim() !== "" && newName !== oldName) {
-        const finalName = newName.trim();
+    // ✅ 自動聚焦輸入框，方便使用者直接打字
+    setTimeout(() => input.focus(), 100);
+
+    // ✅ 支援按 Enter 鍵確認
+    input.onkeydown = function(e) {
+        if (e.key === "Enter" || e.keyCode === 13) {
+            e.preventDefault(); // 防止表單預設行為
+            confirmBtn.click(); // 模擬點擊確認按鈕
+        }
+    };
+
+    confirmBtn.onclick = function() {
+        const newName = input.value.trim();
         
-        // 1. 修改當前顯示的 allTracks (畫面立刻變)
-        targetRoute.name = finalName;
+        if (newName !== "" && newName !== oldName) {
+            const finalName = newName;
+            
+            // 1. 修改數據
+            targetRoute.name = finalName;
 
-        // 2. ✅ 核心：存入 multiGpxStack 筆記本，確保切換檔案不失憶
-        if (window.multiGpxStack && window.multiGpxStack[window.currentMultiIndex]) {
-            const data = window.multiGpxStack[window.currentMultiIndex];
-            if (!data.customRouteNames) data.customRouteNames = {};
-            data.customRouteNames[idx] = finalName;
+            // 2. 存入筆記本 (multiGpxStack)
+            if (window.multiGpxStack && window.multiGpxStack[window.currentMultiIndex]) {
+                const data = window.multiGpxStack[window.currentMultiIndex];
+                if (!data.customRouteNames) data.customRouteNames = {};
+                data.customRouteNames[idx] = finalName;
+            }
+
+            // 3. 更新選單文字
+            const routeSelect = document.getElementById("routeSelect");
+            if (routeSelect && routeSelect.options[idx]) {
+                routeSelect.options[idx].text = finalName;
+            }
+
+            // 4. 刷新 Summary (renderRouteInfo)
+            if (typeof renderRouteInfo === 'function') {
+                renderRouteInfo();
+            }
         }
-
-        // 3. 更新下拉選單文字
-        const routeSelect = document.getElementById("routeSelect");
-        if (routeSelect && routeSelect.options[idx]) {
-            routeSelect.options[idx].text = finalName;
-        }
-
-        // 4. 重新刷新顯示
-        renderRouteInfo();
-    }
+        
+        modal.style.display = 'none';
+        // 清除監聽，避免影響下次操作
+        input.onkeydown = null; 
+    };
 };
