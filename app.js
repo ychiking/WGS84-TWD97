@@ -617,94 +617,100 @@ function clearEverything() {
 }
 
 function parseGPX(text, fileName, shouldFit = true) { 
-  const xml = new DOMParser().parseFromString(text, "application/xml");
-  allTracks = [];
-  const routeSelect = document.getElementById("routeSelect"); 
-  routeSelect.innerHTML = "";
-  
-  const displayName = fileName ? fileName.replace(/\.[^/.]+$/, "") : "結合路線";
-
-  // 1. 取得所有原始航點 (wpt) - 全數保留
-  const wpts = xml.getElementsByTagName("wpt");
-  let allWpts = [];
-  for (let w of wpts) {
-    const lat = parseFloat(w.getAttribute("lat")), lon = parseFloat(w.getAttribute("lon"));
-    const name = w.getElementsByTagName("name")[0]?.textContent || "未命名航點";
-    const time = w.getElementsByTagName("time")[0]?.textContent;
-    const ele = w.getElementsByTagName("ele")[0]?.textContent;
-    allWpts.push({ 
-      lat, lon, name, 
-      ele: ele ? parseFloat(ele) : 0,
-      time: time || null, // 保留原始 ISO 時間供後續比對
-      localTime: time ? formatDate(new Date(new Date(time).getTime() + 8*3600000)) : "無時間資訊" 
-    });
-  }
-
-  // 2. 處理每一條路線 (trk)
-  const trks = xml.getElementsByTagName("trk");
-  let combinedPoints = [];
-  let combinedWaypoints = allWpts; // 結合路線直接擁有所有航點
-
-  for (let i = 0; i < trks.length; i++) {
-    const pts = trks[i].getElementsByTagName("trkpt");
-    const points = extractPoints(pts);
-    
-    if (points.length > 0) {
-      const trackData = { 
-        name: trks[i].getElementsByTagName("name")[0]?.textContent || `路線 ${i + 1}`, 
-        points, 
-        waypoints: allWpts // 🔑 關鍵：每一段路線都先持有「全部」航點，顯示與否交給下一關
-      };
-
-      allTracks.push(trackData);
-      combinedPoints = combinedPoints.concat(points);
-    }
-  }
-
-  // 如果沒有軌跡但有航點
-  if (allTracks.length === 0 && allWpts.length > 0) {
-    allTracks.push({ name: displayName || "僅含航點資料", points: [], waypoints: allWpts });
-  }
-
-  // 處理結合選項
-  if (allTracks.length > 1) {
-    let totalDist = 0;
-    const reCalibratedPoints = combinedPoints.map((p, idx, arr) => {
-        if (idx > 0) {
-            const a = arr[idx-1], R = 6371;
-            const dLat = (p.lat - a.lat) * Math.PI / 180, dLon = (p.lon - a.lon) * Math.PI / 180;
-            const x = Math.sin(dLat/2)**2 + Math.cos(a.lat*Math.PI/180) * Math.cos(p.lat*Math.PI/180) * Math.sin(dLon/2)**2;
-            totalDist += 2 * R * Math.asin(Math.sqrt(x));
-        }
-        return { ...p, distance: totalDist };
-    });
-
-    allTracks.unshift({
-      name: displayName,
-      points: reCalibratedPoints,
-      waypoints: combinedWaypoints,
-      isCombined: true
-    });
-  }
-
-  const container = document.getElementById("routeSelectContainer");
-  if (allTracks.length > 1) {
+    const xml = new DOMParser().parseFromString(text, "application/xml");
+    allTracks = [];
+    const routeSelect = document.getElementById("routeSelect"); 
     routeSelect.innerHTML = "";
-    allTracks.forEach((t, i) => {
-        const opt = document.createElement("option"); 
-        opt.value = i; 
-        opt.textContent = t.name;
-        routeSelect.appendChild(opt);
-    });
-    container.style.cssText = "display: block !important; position: absolute; top: 10px; left: 60px; z-index: 9999;";
-  } else {
-    container.style.display = "none";
-  }
-  
-  if (allTracks.length > 0) {
-    window.multiGpxStack = allTracks;
-    loadRoute(0, shouldFit);
-  }
+    
+    const displayName = fileName ? fileName.replace(/\.[^/.]+$/, "") : "結合路線";
+
+    // 1. 取得所有原始航點 (wpt)
+    const wpts = xml.getElementsByTagName("wpt");
+    let allWpts = [];
+    for (let w of wpts) {
+        const lat = parseFloat(w.getAttribute("lat")), lon = parseFloat(w.getAttribute("lon"));
+        const name = w.getElementsByTagName("name")[0]?.textContent || "未命名航點";
+        const time = w.getElementsByTagName("time")[0]?.textContent;
+        const ele = w.getElementsByTagName("ele")[0]?.textContent;
+        allWpts.push({ 
+            lat, lon, name, 
+            ele: ele ? parseFloat(ele) : 0,
+            time: time || null,
+            localTime: time ? formatDate(new Date(new Date(time).getTime() + 8*3600000)) : "無時間資訊" 
+        });
+    }
+
+    // 2. 處理每一條路線 (trk)
+    const trks = xml.getElementsByTagName("trk");
+    let combinedPoints = [];
+    let combinedSegments = []; // ✅ 新增：用來存放每一段獨立的座標陣列
+    let combinedWaypoints = allWpts;
+
+    for (let i = 0; i < trks.length; i++) {
+        const pts = trks[i].getElementsByTagName("trkpt");
+        const points = extractPoints(pts);
+        
+        if (points.length > 0) {
+            // ✅ 將這一段轉為 Leaflet 座標格式並存入 segments
+            const segCoords = points.map(p => [p.lat, p.lon]);
+            combinedSegments.push(segCoords);
+
+            const trackData = { 
+                name: trks[i].getElementsByTagName("name")[0]?.textContent || `路線 ${i + 1}`, 
+                points, 
+                segments: [segCoords], // ✅ 單一軌跡也包裝成段落格式
+                waypoints: allWpts 
+            };
+
+            allTracks.push(trackData);
+            combinedPoints = combinedPoints.concat(points);
+        }
+    }
+
+    if (allTracks.length === 0 && allWpts.length > 0) {
+        allTracks.push({ name: displayName || "僅含航點資料", points: [], waypoints: allWpts });
+    }
+
+    // 處理結合選項
+    if (allTracks.length > 1) {
+        let totalDist = 0;
+        const reCalibratedPoints = combinedPoints.map((p, idx, arr) => {
+            if (idx > 0) {
+                const a = arr[idx-1], R = 6371;
+                const dLat = (p.lat - a.lat) * Math.PI / 180, dLon = (p.lon - a.lon) * Math.PI / 180;
+                const x = Math.sin(dLat/2)**2 + Math.cos(a.lat*Math.PI/180) * Math.cos(p.lat*Math.PI/180) * Math.sin(dLon/2)**2;
+                totalDist += 2 * R * Math.asin(Math.sqrt(x));
+            }
+            return { ...p, distance: totalDist };
+        });
+
+        allTracks.unshift({
+            name: displayName,
+            points: reCalibratedPoints, // 保留扁平陣列給高度圖、進度條使用
+            segments: combinedSegments, // ✅ 關鍵：將所有段落存入結合軌跡中
+            waypoints: combinedWaypoints,
+            isCombined: true
+        });
+    }
+
+    const container = document.getElementById("routeSelectContainer");
+    if (allTracks.length > 1) {
+        routeSelect.innerHTML = "";
+        allTracks.forEach((t, i) => {
+            const opt = document.createElement("option"); 
+            opt.value = i; 
+            opt.textContent = t.name;
+            routeSelect.appendChild(opt);
+        });
+        container.style.cssText = "display: block !important; position: absolute; top: 10px; left: 60px; z-index: 9999;";
+    } else {
+        container.style.display = "none";
+    }
+    
+    if (allTracks.length > 0) {
+        window.multiGpxStack = allTracks;
+        loadRoute(0, shouldFit);
+    }
 }
 
 function extractPoints(pts) {
@@ -967,6 +973,12 @@ function loadRoute(index, customColor = null) {
         return result;
     };
 
+    // ✅ 修改點：決定繪圖用的座標
+    // 如果已有 segments 則直接使用，否則才執行 breakTracks
+    const drawSegments = (sel.segments && sel.segments.length > 0) 
+                         ? sel.segments 
+                         : breakTracks(trackPoints);
+
     // --- 1. 處理多檔案模式圖層顯示 ---
     let finalColor = customColor || "red"; 
     if (typeof multiGpxStack !== 'undefined' && multiGpxStack.length > 0) {
@@ -974,8 +986,14 @@ function loadRoute(index, customColor = null) {
         multiGpxStack.forEach((item, i) => {
             const layer = item.layer;
             if (!(layer instanceof L.Polyline)) return;
-            const currentRawPts = layer.getLatLngs().flat(Infinity);
-            layer.setLatLngs(breakTracks(currentRawPts)); 
+            
+            // ✅ 確保背景圖層也套用分段
+            if (item.segments && item.segments.length > 0) {
+                layer.setLatLngs(item.segments);
+            } else {
+                const currentRawPts = layer.getLatLngs().flat(Infinity);
+                layer.setLatLngs(breakTracks(currentRawPts)); 
+            }
 
             if (i === stackIdx) {
                 const isSelectingCombined = (index === 0 || sel.name.includes("結合"));
@@ -1002,8 +1020,8 @@ function loadRoute(index, customColor = null) {
 
     // --- 2. 繪製目前選中的高亮軌跡 ---
     if (trackPoints && trackPoints.length > 0) {
-        const segments = breakTracks(trackPoints);
-        polyline = L.polyline(segments, { color: finalColor, weight: 6, opacity: 0.8 }).addTo(map);
+        // ✅ 使用 drawSegments 繪圖，解決直線問題
+        polyline = L.polyline(drawSegments, { color: finalColor, weight: 6, opacity: 0.8 }).addTo(map);
 
         if (polyline.getBounds().isValid()) {
             if (!map.getBounds().pad(0.05).intersects(polyline.getBounds())) {
@@ -1057,47 +1075,32 @@ function loadRoute(index, customColor = null) {
         if (typeof drawElevationChart === 'function') drawElevationChart();
     }
 
-    // --- 3. 繪製航點 (已修正：移除 200m 距離過濾) ---
+    // --- 3. 繪製航點 (邏輯維持原樣) ---
     if (sel.waypoints && sel.waypoints.length > 0) {
         const activeIdx = window.currentActiveIndex || 0;
-
-        // 計算目前選中軌跡的時間範圍
         let startTime = null, endTime = null;
         if (trackPoints && trackPoints.length > 0) {
             const times = trackPoints.map(p => p.time ? new Date(p.time).getTime() : null).filter(t => t);
             if (times.length > 0) {
-                // 給予前後 1 小時緩衝
                 startTime = Math.min(...times) - (60 * 60 * 1000);
                 endTime = Math.max(...times) + (60 * 60 * 1000);
             }
         }
 
         const displayWaypoints = sel.waypoints.filter(w => {
-            // A. 整合路線一律顯示
             if (activeIdx === 0) return true;
-            
-            // B. 手動分配的點一律顯示
             if (w.belongsToRoute !== undefined) return w.belongsToRoute === activeIdx;
-
             const wTimeVal = w.time ? new Date(w.time).getTime() : null;
-
-            // C. 智慧攔截：僅針對當年(2025)登山期間但「錄錯天」的點
             if (wTimeVal && startTime) {
                 const is2025Trek = new Date(wTimeVal).getFullYear() === 2025;
                 const isInTimeRange = (wTimeVal >= startTime && wTimeVal <= endTime);
-                
-                // 如果是 2025 年錄製的點，但不在這段路的時間內，就濾掉
                 if (is2025Trek && !isInTimeRange) return false;
             }
-
-            // D. 全面放行：其餘所有點 (包含 2026 年新增的 222, 或無時間點) 無視距離顯示
             return true;
         });
 
-        // 渲染航點 Marker
         displayWaypoints.forEach((w) => {
-        	
-              let tIdx = 0;
+            let tIdx = 0;
             if (trackPoints.length > 0) {
                 let minD = Infinity;
                 trackPoints.forEach((tp, pi) => {
@@ -1105,7 +1108,6 @@ function loadRoute(index, customColor = null) {
                     if (d < minD) { minD = d; tIdx = pi; }
                 });
             }
-            
             const wm = L.marker([w.lat, w.lon], { icon: wptIcon }).addTo(map);
             const isAlways = typeof showWptNameAlways !== 'undefined' && showWptNameAlways;
             wm.bindTooltip(w.name, { 
@@ -1115,7 +1117,6 @@ function loadRoute(index, customColor = null) {
                 className: isAlways ? 'wpt-label-label' : ''
             });
             if (isAlways) wm.openTooltip();
-
             wm.on('click', (e) => { 
                 L.DomEvent.stopPropagation(e); 
                 showCustomPopup(tIdx, w.name, "wpt", w.lat, w.lon); 
@@ -1133,11 +1134,8 @@ function loadRoute(index, customColor = null) {
     }
     
     if (typeof renderRouteInfo === 'function') renderRouteInfo();
-    if (typeof renderWaypointsAndPeaks === 'function') {
-        renderWaypointsAndPeaks(sel); 
-    }
-    
-    initProgressBar();
+    if (typeof renderWaypointsAndPeaks === 'function') renderWaypointsAndPeaks(sel); 
+    if (typeof initProgressBar === 'function') initProgressBar();
 }
  
 function toggleWptNames() {
