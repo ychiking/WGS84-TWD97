@@ -779,24 +779,40 @@ function setupProgressBar() {
     L.DomEvent.disableClickPropagation(barContainer);
     L.DomEvent.disableScrollPropagation(barContainer);
 
-    
+    // 統一使用的標記點變數（若全域已有定義 window.activeFocusCircle 則會沿用）
+    const getIndicator = (latlng) => {
+        if (!window.activeFocusCircle) {
+            window.activeFocusCircle = L.circleMarker(latlng, {
+                radius: 7,
+                color: '#ffffff',
+                weight: 2,
+                fillColor: '#1a73e8',
+                fillOpacity: 1,
+                interactive: false
+            }).addTo(map);
+        } else {
+            window.activeFocusCircle.setLatLng(latlng);
+            if (!map.hasLayer(window.activeFocusCircle)) {
+                window.activeFocusCircle.addTo(map);
+            }
+        }
+        return window.activeFocusCircle;
+    };
+
     const startAutoCloseTimer = () => {
-        
-        if (fsPopupTimer) clearTimeout(fsPopupTimer);
-        
-        fsPopupTimer = setTimeout(() => {
+        if (window.fsPopupTimer) clearTimeout(window.fsPopupTimer);
+        window.fsPopupTimer = setTimeout(() => {
             map.closePopup();
         }, 3000);
     };
 
-    
     const handleCheckboxChange = (isChecked) => {
         if (mainCheckbox) mainCheckbox.checked = isChecked;
         if (fsCheckbox) fsCheckbox.checked = isChecked;
 
         if (!isChecked) {
             map.closePopup();
-            if (fsPopupTimer) clearTimeout(fsPopupTimer); 
+            if (window.fsPopupTimer) clearTimeout(window.fsPopupTimer); 
         } else {
             const idx = parseInt(progressBar.value);
             if (typeof showCustomPopup === 'function' && trackPoints && trackPoints[idx]) {
@@ -810,34 +826,31 @@ function setupProgressBar() {
     if (fsCheckbox) fsCheckbox.addEventListener('change', (e) => handleCheckboxChange(e.target.checked));
 
     window.updateVisibility = () => {
-    const barContainer = document.getElementById("map-control-bar");
-    if (!barContainer) return;
+        const barContainer = document.getElementById("map-control-bar");
+        if (!barContainer) return;
 
-    const hasTracks = (typeof trackPoints !== 'undefined' && trackPoints && trackPoints.length > 0);
-    
-    
-    if (hasTracks && window.manualShowBar) {
-        barContainer.style.setProperty('display', 'flex', 'important');
-        barContainer.style.visibility = 'visible'; 
-        barContainer.style.opacity = '1';
-
+        const hasTracks = (typeof trackPoints !== 'undefined' && trackPoints && trackPoints.length > 0);
         
-        const isIphoneFS = document.body.classList.contains('iphone-fullscreen');
-        const isLandscape = window.innerWidth > window.innerHeight && window.innerHeight < 500;
+        if (hasTracks && window.manualShowBar) {
+            barContainer.style.setProperty('display', 'flex', 'important');
+            barContainer.style.visibility = 'visible'; 
+            barContainer.style.opacity = '1';
 
-        if (isLandscape) {
-            barContainer.style.bottom = '5px';
-        } else if (isIphoneFS) {
-            
-            barContainer.style.bottom = '100px'; 
-            barContainer.style.zIndex = '2000'; 
+            const isIphoneFS = document.body.classList.contains('iphone-fullscreen');
+            const isLandscape = window.innerWidth > window.innerHeight && window.innerHeight < 500;
+
+            if (isLandscape) {
+                barContainer.style.bottom = '5px';
+            } else if (isIphoneFS) {
+                barContainer.style.bottom = '100px'; 
+                barContainer.style.zIndex = '2000'; 
+            } else {
+                barContainer.style.bottom = '65px';
+            }
         } else {
-            barContainer.style.bottom = '65px';
+            barContainer.style.setProperty('display', 'none', 'important');
         }
-    } else {
-        barContainer.style.setProperty('display', 'none', 'important');
-    }
-};
+    };
 
     document.addEventListener('fullscreenchange', updateVisibility);
     document.addEventListener('webkitfullscreenchange', updateVisibility);
@@ -849,47 +862,62 @@ function setupProgressBar() {
     });
     observer.observe(document.body, { attributes: true });
 
-    
+    // --- 優化拖拉流暢度的變數 ---
+    let ticking = false;
+
     progressBar.addEventListener("input", function() {
         const idx = parseInt(this.value);
         if (!trackPoints || !trackPoints[idx]) return;
         const p = trackPoints[idx];
 
-        if (hoverMarker) {
-            hoverMarker.setLatLng([p.lat, p.lon]).bringToFront();
-            if (!map.getBounds().contains([p.lat, p.lon])) {
-                map.panTo([p.lat, p.lon], { animate: false });
-            }
+        // 1. 立即更新不需要透過地圖運算的部分 (文字資訊)
+        const infoEl = document.getElementById("progressBarInfo");
+        if (infoEl) infoEl.textContent = `${p.distance.toFixed(2)} km`;
+
+        // 2. 使用 requestAnimationFrame 優化地圖與 Marker 的移動
+        if (!ticking) {
+            window.requestAnimationFrame(() => {
+                const latlng = [p.lat, p.lon];
+
+                // 確保小白點存在並移動位置 (不管資訊視窗是否開啟都會動)
+                const indicator = getIndicator(latlng);
+                indicator.bringToFront();
+
+                // 視野自動跟隨 (當點不在畫面內時)
+                if (!map.getBounds().contains(latlng)) {
+                    map.panTo(latlng, { animate: false });
+                }
+
+                // 同步高度表 (Chart.js)
+                if (typeof chart !== 'undefined' && chart) {
+                    const meta = chart.getDatasetMeta(0);
+                    const point = meta.data[idx];
+                    if (point) {
+                        chart.setActiveElements([{ datasetIndex: 0, index: idx }]);
+                        chart.tooltip.setActiveElements(
+                            [{ datasetIndex: 0, index: idx }],
+                            { x: point.x, y: point.y }
+                        );
+                        chart.update('none'); 
+                    }
+                }
+                ticking = false;
+            });
+            ticking = true;
         }
-        document.getElementById("progressBarInfo").textContent = `${p.distance.toFixed(2)} km`;
-        
-        if (chart) { 
-            const meta = chart.getDatasetMeta(0);
-            const point = meta.data[idx];
-            if (point) {
-                chart.setActiveElements([{ datasetIndex: 0, index: idx }]);
-                chart.tooltip.setActiveElements(
-                    [{ datasetIndex: 0, index: idx }],
-                    { x: point.x, y: point.y }
-                );
-                chart.update('none'); 
-            }
-        }
-        
-        
+
+        // 3. 處理彈窗顯示與否
         const isChecked = fsCheckbox ? fsCheckbox.checked : (mainCheckbox ? mainCheckbox.checked : true);
         if (typeof showCustomPopup === 'function') {
             if (isChecked) {
                 showCustomPopup(idx, "位置資訊");
-                
-                
             } else {
-                map.closePopup(); 
+                // 如果未勾選顯示資訊，僅關閉彈窗，但不影響上面小白點的移動
+                if (map._popup) map.closePopup();
             }
         }
     });
 
-    
     progressBar.addEventListener("change", function() {
         const isChecked = fsCheckbox ? fsCheckbox.checked : (mainCheckbox ? mainCheckbox.checked : true);
         if (isChecked) startAutoCloseTimer();
@@ -1606,7 +1634,7 @@ function showCustomPopup(idx, title, typeOrEle = null, realLat = null, realLon =
     } else {
         
         window.activeFocusCircle = L.circleMarker([lat, lon], {
-            radius: 5, color: '#fff', weight: 1, fillColor: '#1a73e8', fillOpacity: 1, interactive: false
+            radius: 7, color: '#fff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1, interactive: false
         }).addTo(map);
     }
 
@@ -1752,43 +1780,37 @@ function drawElevationChart() {
     if (points.length) {
         const idx = points[0].index;
         const p = trackPoints[idx];
-        window.lastHoverIdx = idx;
-        
+        const latlng = [p.lat, p.lon];
+
+        // 更新捲軸與文字
         const progressBar = document.getElementById("gpxProgressBar");
-            if (progressBar) {
-                progressBar.value = idx;
-                
-                const info = document.getElementById("progressBarInfo");
-                if (info) info.textContent = `${p.distance.toFixed(2)} km`;
-            }
+        if (progressBar) progressBar.value = idx;
+        const info = document.getElementById("progressBarInfo");
+        if (info) info.textContent = `${p.distance.toFixed(2)} km`;
 
-        
+        // --- 統一使用 window.activeFocusCircle ---
+        if (!window.activeFocusCircle) {
+            window.activeFocusCircle = L.circleMarker(latlng, {
+                radius: 7, color: '#ffffff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1, interactive: false
+            }).addTo(map);
+        } else {
+            window.activeFocusCircle.setLatLng(latlng);
+            if (!map.hasLayer(window.activeFocusCircle)) window.activeFocusCircle.addTo(map);
+        }
+        window.activeFocusCircle.bringToFront();
+
+        // 地圖跟隨
+        if (!map.getBounds().contains(latlng)) {
+            map.panTo(latlng, { animate: true, duration: 0.3 });
+        }
+
+        // 彈窗判斷 (依照你的 checkbox 邏輯)
         const checkbox = document.getElementById("showChartTipCheckbox");
-        const isChecked = checkbox ? checkbox.checked : true;
-
-        if (isChecked) {
-            
+        if (checkbox && checkbox.checked) {
             showCustomPopup(idx, "位置資訊");
         }
 
-        
-        if (hoverMarker) {
-            const newLatLng = [p.lat, p.lon];
-            hoverMarker.setLatLng(newLatLng).bringToFront();
-
-            
-            
-            const bounds = map.getBounds();
-            
-            if (!bounds.contains(newLatLng)) {
-                
-                map.panTo(newLatLng, { animate: true, duration: 0.5 });
-            }
-        }
-
-        
         chart.setActiveElements([{ datasetIndex: 0, index: idx }]);
-        chart.tooltip.setActiveElements([{ datasetIndex: 0, index: idx }], { x: 0, y: 0 });
         chart.update('none');
 
         
