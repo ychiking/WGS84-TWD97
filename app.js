@@ -3709,12 +3709,18 @@ window.toggleColorPicker = function(i) {
 let currentEditTask = null;
 
 window.handleWptEdit = function(existingIdx, lat, lon, ele, oldName, timeStr, originalIdx) {
-    
+    // 1. 初始化資料堆疊與索引邏輯
     if (typeof window.currentMultiIndex === 'undefined') window.currentActiveIndex = 0; 
     let stackIdx = window.currentMultiIndex || 0;
     if (typeof multiGpxStack === 'undefined' || !multiGpxStack) window.multiGpxStack = [];
     if (!multiGpxStack[stackIdx]) {
-        multiGpxStack[stackIdx] = { name: "純航點", points: [], waypoints: [], stats: { totalDistance: 0, totalElevation: 0 }, isCombined: false };
+        multiGpxStack[stackIdx] = { 
+            name: "純航點", 
+            points: [], 
+            waypoints: [], 
+            stats: { totalDistance: 0, totalElevation: 0 }, 
+            isCombined: false 
+        };
     }
     if (typeof allTracks === 'undefined' || !allTracks || allTracks.length === 0) {
         window.allTracks = [multiGpxStack[stackIdx]];
@@ -3722,34 +3728,49 @@ window.handleWptEdit = function(existingIdx, lat, lon, ele, oldName, timeStr, or
     let activeIdx = window.currentActiveIndex || 0;
     if (!allTracks[activeIdx]) activeIdx = 0;
 
-    
+    // 2. 取得 DOM 元素
     const modal = document.getElementById('wptEditModal');
     const nameInput = document.getElementById('modalWptName');
     const eleInput = document.getElementById('modalWptEle');
     const confirmBtn = document.getElementById('modalWptConfirm');
 
+    if (!modal || !nameInput || !eleInput || !confirmBtn) return;
+
+    // 3. 填入初始值並顯示 Modal
     nameInput.value = oldName || "";
     eleInput.value = (ele !== null && ele !== "---") ? ele : 0;
     modal.style.display = 'flex';
 
-    
+    // 4. 強效喚醒鍵盤與全選文字邏輯
     setTimeout(() => { 
+        // 設定屬性幫助行動端辨識
+        nameInput.setAttribute('inputmode', 'text');
+        
+        // 執行對焦
         nameInput.focus();
-        nameInput.select(); 
-    }, 100);
+        
+        // 在行動端 setSelectionRange 比 select() 更穩定
+        const valLen = nameInput.value.length;
+        nameInput.setSelectionRange(0, valLen);
+        
+        // 額外觸發一次點擊，增加喚醒鍵盤成功率
+        nameInput.click();
+    }, 250); // 250ms 是避開 Modal 動畫並成功對焦的穩定延遲
 
-    
     currentEditTask = { existingIdx, lat, lon, ele, oldName, timeStr, originalIdx, stackIdx, activeIdx };
 
-    
+    // 5. 關閉視窗邏輯
     const closeModal = () => {
+        // 關閉時強制收起手機鍵盤
+        if (document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur();
+        }
         modal.style.display = 'none';
         window.removeEventListener('keydown', handleEscKey); 
         nameInput.onkeydown = null;
         eleInput.onkeydown = null;
     };
 
-    
     const handleEscKey = (e) => {
         if (e.key === "Escape") {
             closeModal();
@@ -3757,7 +3778,6 @@ window.handleWptEdit = function(existingIdx, lat, lon, ele, oldName, timeStr, or
     };
     window.addEventListener('keydown', handleEscKey);
 
-    
     const handleEnterKey = (e) => {
         if (e.key === "Enter" || e.keyCode === 13) {
             e.preventDefault();
@@ -3765,18 +3785,15 @@ window.handleWptEdit = function(existingIdx, lat, lon, ele, oldName, timeStr, or
         }
     };
 
-    
     nameInput.onkeydown = handleEnterKey;
     eleInput.onkeydown = handleEnterKey;
 
-    
+    // 6. 確認儲存
     confirmBtn.onclick = function() {
         const finalName = nameInput.value.trim() || "未命名航點";
         const finalEle = eleInput.value;
 
-        
         processSave(finalName, finalEle);
-        
         closeModal(); 
     };
 };
