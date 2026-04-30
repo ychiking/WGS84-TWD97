@@ -2829,8 +2829,11 @@ async function handleGpxFiles(files) {
     `;
     clearAllMultiGPX(); 
     
-    const hint = document.getElementById('importHint');
+		const hint = document.getElementById('importHint');
     if (hint) hint.style.display = 'none';
+    
+    const refreshIcon = document.getElementById('refreshIcon');
+    if (refreshIcon) refreshIcon.style.display = 'none'; // 同步隱藏重新整理圖示
     
     let allBounds = L.latLngBounds([]);
 
@@ -3956,26 +3959,38 @@ window.exportGpx = function(index) {
     const item = (typeof multiGpxStack !== 'undefined') ? multiGpxStack[idx] : null;
     const routeSelect = document.getElementById("routeSelect");
     let activeIdx = parseInt(routeSelect?.value) || 0;
-    let currentRoute = (typeof allTracks !== 'undefined') ? allTracks[activeIdx] : item;
-
-    if (!currentRoute) return alert("找不到資料");
-
     
+    // [修正1] 嘗試獲取目前軌跡，若無則建立一個包含「所有航點」的虛擬對象
+    let currentRoute = (typeof allTracks !== 'undefined' && allTracks[activeIdx]) ? allTracks[activeIdx] : item;
+
+    // 如果還是找不到軌跡，且全域有航點列表，就手動建立一個對象
+    if (!currentRoute && typeof allWpts !== 'undefined' && allWpts.length > 0) {
+        currentRoute = {
+            name: "New_Waypoints",
+            points: [],
+            waypoints: allWpts,
+            isCustomExport: true
+        };
+    }
+
+    if (!currentRoute) return alert("找不到可匯出的資料（軌跡或航點）");
+
     const toTwDate = (timeStr) => {
         if (!timeStr) return null;
         const d = new Date(timeStr);
         if (isNaN(d.getTime())) return timeStr.split('T')[0]; 
-        
         const twTime = new Date(d.getTime() + (8 * 60 * 60 * 1000));
         return twTime.toISOString().split('T')[0];
     };
 
-    const targetDate = currentRoute.points?.length > 0 ? toTwDate(currentRoute.points[0].time) : null;
+    // [修正2] 若無軌跡點，則不設定 targetDate，避免日期比對導致航點被過濾
+    const hasPoints = currentRoute.points && currentRoute.points.length > 0;
+    const targetDate = hasPoints ? toTwDate(currentRoute.points[0].time) : null;
     const trackName = (currentRoute.name || "Exported_Route").replace(/[/\\?%*:|<>]/g, '-');
 
     let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="YCHiking" xmlns="http://www.topografix.com/GPX/1/1">\n  <metadata><name>${trackName}</name></metadata>`;
 
-    
+    // 匯出軌跡部分
     let tracksToExport = currentRoute.isCombined ? allTracks.filter(t => !t.isCombined) : [currentRoute];
     tracksToExport.forEach(route => {
         if (route.points?.length > 0) {
@@ -3987,39 +4002,37 @@ window.exportGpx = function(index) {
         }
     });
 
-    
+    // [修正3] 放寬航點過濾邏輯
     let finalWpts = [];
     const rawWpts = currentRoute.waypoints || [];
 
     rawWpts.forEach(w => {
         let shouldInclude = false;
         
-        if (currentRoute.isCombined) {
+        if (currentRoute.isCombined || currentRoute.isCustomExport) {
+            // 如果是合併模式或純航點匯出，包含所有航點
             shouldInclude = true;
         } else {
-            
+            // 正常的軌跡過濾邏輯
             if (w.isCustom || w.belongsToRoute !== undefined) {
-                if (w.belongsToRoute === activeIdx) shouldInclude = true;
-            } 
-            
-            else {
+                // 如果是手動新增或已標記屬於此軌跡
+                if (w.belongsToRoute === activeIdx || !hasPoints) shouldInclude = true;
+            } else {
                 const wptTwDate = toTwDate(w.time);
                 if (targetDate && wptTwDate === targetDate) shouldInclude = true;
                 else if (!w.time) shouldInclude = true; 
             }
         }
-
         if (shouldInclude) finalWpts.push(w);
     });
 
-    
     finalWpts.forEach(w => {
         gpx += `\n  <wpt lat="${w.lat}" lon="${w.lon}">\n    <ele>${w.ele || 0}</ele>\n    <name>${w.name || "未命名"}</name>${w.time ? `\n    <time>${w.time}</time>` : ""}\n  </wpt>`;
     });
 
     gpx += `\n</gpx>`;
 
-    
+    // 下載邏輯...
     const blob = new Blob(["\ufeff" + gpx], { type: 'application/gpx+xml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -4028,8 +4041,6 @@ window.exportGpx = function(index) {
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
-
-    
 };
 
 window.renameSubRoute = function(idx) {
