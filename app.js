@@ -1628,15 +1628,17 @@ function showCustomPopup(idx, title, typeOrEle = null, realLat = null, realLon =
 
     if (lat === null || lon === null) return;
 
-    
-    if (window.activeFocusCircle) {
-        window.activeFocusCircle.setLatLng([lat, lon]);
-    } else {
-        
-        window.activeFocusCircle = L.circleMarker([lat, lon], {
-            radius: 7, color: '#fff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1, interactive: false
-        }).addTo(map);
-    }
+    map.eachLayer(layer => {
+
+        if (layer instanceof L.CircleMarker && layer.options.radius === 7) {
+            map.removeLayer(layer);
+        }
+    });
+    window.activeFocusCircle = null; 
+
+    window.activeFocusCircle = L.circleMarker([lat, lon], {
+        radius: 7, color: '#fff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1, interactive: false
+    }).addTo(map);
 
     
     let matchedPoint = (idx !== null && idx !== 999999 && typeof trackPoints !== 'undefined' && trackPoints[idx]) ? trackPoints[idx] : null;
