@@ -3986,10 +3986,8 @@ window.exportGpx = function(index) {
     const routeSelect = document.getElementById("routeSelect");
     let activeIdx = parseInt(routeSelect?.value) || 0;
     
-    
     let currentRoute = (typeof allTracks !== 'undefined' && allTracks[activeIdx]) ? allTracks[activeIdx] : item;
 
-    
     if (!currentRoute && typeof allWpts !== 'undefined' && allWpts.length > 0) {
         currentRoute = {
             name: "New_Waypoints",
@@ -3999,50 +3997,59 @@ window.exportGpx = function(index) {
         };
     }
 
-    if (!currentRoute) return alert("找不到可匯出的資料（軌跡或航點）");
+    if (!currentRoute) return alert("找不到可匯出的資料");
+
+    const escapeXml = (unsafe) => {
+        if (!unsafe) return "";
+        return unsafe.toString()
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&apos;');
+    };
+
+    // --- 【新增】專門處理 BaseCamp 時間格式的函式 ---
+    const formatIsoTime = (timeStr) => {
+        if (!timeStr) return null;
+        // 確保將空白替換為 T，並確保符合 ISO 8601 格式
+        let formatted = timeStr.trim().replace(/\s+/g, 'T');
+        
+        // 如果結尾沒有 Z 或時區偏移，則補上 Z (代表 UTC)
+        if (!formatted.includes('Z') && !formatted.includes('+')) {
+            formatted += 'Z';
+        }
+        return formatted;
+    };
 
     const toTwDate = (timeStr) => {
         if (!timeStr) return null;
         const d = new Date(timeStr);
-        if (isNaN(d.getTime())) return timeStr.split('T')[0]; 
+        if (isNaN(d.getTime())) return null; 
         const twTime = new Date(d.getTime() + (8 * 60 * 60 * 1000));
         return twTime.toISOString().split('T')[0];
     };
 
-    
     const hasPoints = currentRoute.points && currentRoute.points.length > 0;
     const targetDate = hasPoints ? toTwDate(currentRoute.points[0].time) : null;
-    const trackName = (currentRoute.name || "Exported_Route").replace(/[/\\?%*:|<>]/g, '-');
+    const trackName = escapeXml(currentRoute.name || "Exported_Route");
 
-    let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="YCHiking" xmlns="http://www.topografix.com/GPX/1/0">\n  <metadata><name>${trackName}</name></metadata>`;
+    let gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.0" creator="YCHiking" 
+  xmlns="http://www.topografix.com/GPX/1/0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
+  <metadata><name>${trackName}</name></metadata>`;
 
-    
-    let tracksToExport = currentRoute.isCombined ? allTracks.filter(t => !t.isCombined) : [currentRoute];
-    tracksToExport.forEach(route => {
-        if (route.points?.length > 0) {
-            gpx += `\n  <trk><name>${route.name || "Track"}</name><trkseg>`;
-            route.points.forEach(p => {
-                gpx += `\n      <trkpt lat="${p.lat}" lon="${p.lon}"><ele>${p.ele || 0}</ele>${p.time ? `<time>${p.time}</time>` : ""}</trkpt>`;
-            });
-            gpx += `\n    </trkseg>\n  </trk>`;
-        }
-    });
-
-    
     let finalWpts = [];
     const rawWpts = currentRoute.waypoints || [];
-
     rawWpts.forEach(w => {
         let shouldInclude = false;
-        
-        if (currentRoute.isCombined || currentRoute.isCustomExport) {
-            
+        if (!hasPoints || currentRoute.isCombined || currentRoute.isCustomExport) {
             shouldInclude = true;
         } else {
-            
             if (w.isCustom || w.belongsToRoute !== undefined) {
-                
-                if (w.belongsToRoute === activeIdx || !hasPoints) shouldInclude = true;
+                if (w.belongsToRoute === activeIdx) shouldInclude = true;
             } else {
                 const wptTwDate = toTwDate(w.time);
                 if (targetDate && wptTwDate === targetDate) shouldInclude = true;
@@ -4052,18 +4059,40 @@ window.exportGpx = function(index) {
         if (shouldInclude) finalWpts.push(w);
     });
 
+
     finalWpts.forEach(w => {
-        gpx += `\n  <wpt lat="${w.lat}" lon="${w.lon}">\n    <ele>${w.ele || 0}</ele>\n    <name>${w.name || "未命名"}</name>${w.time ? `\n    <time>${w.time}</time>` : ""}\n  </wpt>`;
+        const name = escapeXml(w.name || "WayPoint");
+        const safeTime = formatIsoTime(w.time); 
+        gpx += `\n  <wpt lat="${Number(w.lat).toFixed(6)}" lon="${Number(w.lon).toFixed(6)}">`;
+        if (w.ele !== undefined) gpx += `\n    <ele>${Number(w.ele).toFixed(2)}</ele>`;
+        gpx += `\n    <name>${name}</name>`;
+        if (safeTime) gpx += `\n    <time>${safeTime}</time>`;
+        gpx += `\n  </wpt>`;
+    });
+
+    let tracksToExport = currentRoute.isCombined ? allTracks.filter(t => !t.isCombined) : [currentRoute];
+    tracksToExport.forEach(route => {
+        if (route.points?.length > 0) {
+            const trkName = escapeXml(route.name || "Track");
+            gpx += `\n  <trk>\n    <name>${trkName}</name>\n    <trkseg>`;
+            route.points.forEach(p => {
+                const safePTime = formatIsoTime(p.time); 
+                gpx += `\n      <trkpt lat="${Number(p.lat).toFixed(6)}" lon="${Number(p.lon).toFixed(6)}">`;
+                if (p.ele !== undefined) gpx += `<ele>${Number(p.ele).toFixed(2)}</ele>`;
+                if (safePTime) gpx += `<time>${safePTime}</time>`;
+                gpx += `</trkpt>`;
+            });
+            gpx += `\n    </trkseg>\n  </trk>`;
+        }
     });
 
     gpx += `\n</gpx>`;
 
-    
-    const blob = new Blob(["\ufeff" + gpx], { type: 'application/gpx+xml;charset=utf-8' });
+    const blob = new Blob([gpx], { type: 'application/gpx+xml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${trackName}.gpx`;
+    a.download = `${trackName.replace(/ /g, '_')}.gpx`;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
