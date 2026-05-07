@@ -3999,7 +3999,6 @@ window.exportGpx = function(index) {
     
     let currentRoute = (typeof allTracks !== 'undefined' && allTracks[activeIdx]) ? allTracks[activeIdx] : item;
 
-    // 若沒有軌跡但有航點，建立虛擬路由
     if (!currentRoute && typeof allWpts !== 'undefined' && allWpts.length > 0) {
         currentRoute = {
             name: "New_Waypoints",
@@ -4051,58 +4050,59 @@ window.exportGpx = function(index) {
   <metadata><name>${trackName}</name></metadata>`;
 
     let finalWpts = [];
-    
-    // 【修改點】：判斷使用哪一套航點處理邏輯
-    // 如果有 routeSelect 且選項大於 1，代表正在處理「含子路線」的 GPX
+
+    const seenWpts = new Set();
+
     const isMultiRoute = routeSelect && routeSelect.options.length > 1;
 
     if (isMultiRoute) {
-    // --- 修改後的篩選邏輯 ---
-    // 關鍵修正：如果目前路線本身沒帶航點，就去全域 allWpts 抓，確保像「青青版」這種結構能抓到資料
-    const rawWpts = (currentRoute.waypoints && currentRoute.waypoints.length > 0) 
-                    ? currentRoute.waypoints 
-                    : (typeof allWpts !== 'undefined' ? allWpts : []);
+        const rawWpts = (currentRoute.waypoints && currentRoute.waypoints.length > 0) 
+                        ? currentRoute.waypoints 
+                        : (typeof allWpts !== 'undefined' ? allWpts : []);
 
-    rawWpts.forEach(w => {
-        let shouldInclude = false;
-        
-        // 模式 1：強制包含的情境（無軌跡點、合併匯出、自定義匯出）
-        if (!hasPoints || currentRoute.isCombined || currentRoute.isCustomExport) {
-            shouldInclude = true;
-        } else {
-            // 模式 2：判斷歸屬權
-            if (w.isCustom || w.belongsToRoute !== undefined) {
-                // 如果明確標記了屬於哪條路線，則嚴格比對
-                if (w.belongsToRoute === activeIdx) shouldInclude = true;
+        rawWpts.forEach(w => {
+
+            const wptKey = `${w.lat}_${w.lon}_${w.name || ''}_${w.time || ''}`;
+            if (seenWpts.has(wptKey)) return; 
+
+            let shouldInclude = false;
+            if (!hasPoints || currentRoute.isCombined || currentRoute.isCustomExport) {
+                shouldInclude = true;
             } else {
-                // 模式 3：處理像「青青版」這種無歸屬標記的點
-                const wptTwDate = toTwDate(w.time);
-                
-                if (targetDate && wptTwDate === targetDate) {
-                    // 日期對得上，包含
-                    shouldInclude = true;
-                } else if (!w.time) {
-                    // 沒有時間戳記的點（通常是手動點位），包含
-                    shouldInclude = true;
-                } else if (!targetDate) {
-                    // 【新增修正】：如果軌跡本身沒有時間（如青青版的 trk），
-                    // 則無法比對日期，此時為了不漏掉航點，預設包含
-                    shouldInclude = true;
+                if (w.isCustom || w.belongsToRoute !== undefined) {
+                    if (w.belongsToRoute === activeIdx) shouldInclude = true;
+                } else {
+                    const wptTwDate = toTwDate(w.time);
+                    if (targetDate && wptTwDate === targetDate) {
+                        shouldInclude = true;
+                    } else if (!w.time) {
+                        shouldInclude = true;
+                    } else if (!targetDate) {
+                        shouldInclude = true;
+                    }
                 }
             }
-        }
-        if (shouldInclude) finalWpts.push(w);
-    });
+
+            if (shouldInclude) {
+                finalWpts.push(w);
+                seenWpts.add(wptKey); 
+            }
+        });
     } else {
-        // --- 執行你的第二段邏輯（單一路線全匯出） ---
-        finalWpts = (typeof allWpts !== 'undefined' && allWpts.length > 0) ? allWpts : (currentRoute.waypoints || []);
+         const rawSource = (typeof allWpts !== 'undefined' && allWpts.length > 0) ? allWpts : (currentRoute.waypoints || []);
+        
+        rawSource.forEach(w => {
+            const wptKey = `${w.lat}_${w.lon}_${w.name || ''}_${w.time || ''}`;
+            if (!seenWpts.has(wptKey)) {
+                finalWpts.push(w);
+                seenWpts.add(wptKey);
+            }
+        });
     }
 
-    // 寫入航點到 XML
     finalWpts.forEach(w => {
         const name = escapeXml(w.name || "WayPoint");
         const safeTime = formatIsoTime(w.time); 
-        // 根據邏輯決定是否使用 toFixed(6) (子路線用 toFixed，單一用原始)
         const lat = isMultiRoute ? Number(w.lat).toFixed(6) : w.lat;
         const lon = isMultiRoute ? Number(w.lon).toFixed(6) : w.lon;
         
@@ -4113,7 +4113,6 @@ window.exportGpx = function(index) {
         gpx += `\n  </wpt>`;
     });
 
-    // 處理軌跡部分
     let tracksToExport = currentRoute.isCombined ? allTracks.filter(t => !t.isCombined) : [currentRoute];
     tracksToExport.forEach(route => {
         if (route.points?.length > 0) {
@@ -4135,7 +4134,6 @@ window.exportGpx = function(index) {
 
     gpx += `\n</gpx>`;
 
-    // 下載
     const blob = new Blob([gpx], { type: 'application/gpx+xml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
