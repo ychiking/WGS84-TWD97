@@ -3999,6 +3999,7 @@ window.exportGpx = function(index) {
     
     let currentRoute = (typeof allTracks !== 'undefined' && allTracks[activeIdx]) ? allTracks[activeIdx] : item;
 
+    // 若沒有軌跡但有航點，建立虛擬路由
     if (!currentRoute && typeof allWpts !== 'undefined' && allWpts.length > 0) {
         currentRoute = {
             name: "New_Waypoints",
@@ -4020,13 +4021,9 @@ window.exportGpx = function(index) {
             .replace(/'/g, '&apos;');
     };
 
-    // --- 【新增】專門處理 BaseCamp 時間格式的函式 ---
     const formatIsoTime = (timeStr) => {
         if (!timeStr) return null;
-        // 確保將空白替換為 T，並確保符合 ISO 8601 格式
         let formatted = timeStr.trim().replace(/\s+/g, 'T');
-        
-        // 如果結尾沒有 Z 或時區偏移，則補上 Z (代表 UTC)
         if (!formatted.includes('Z') && !formatted.includes('+')) {
             formatted += 'Z';
         }
@@ -4045,6 +4042,7 @@ window.exportGpx = function(index) {
     const targetDate = hasPoints ? toTwDate(currentRoute.points[0].time) : null;
     const trackName = escapeXml(currentRoute.name || "Exported_Route");
 
+    // --- 開始構建 GPX ---
     let gpx = `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.0" creator="YCHiking" 
   xmlns="http://www.topografix.com/GPX/1/0"
@@ -4053,34 +4051,50 @@ window.exportGpx = function(index) {
   <metadata><name>${trackName}</name></metadata>`;
 
     let finalWpts = [];
-    const rawWpts = currentRoute.waypoints || [];
-    rawWpts.forEach(w => {
-        let shouldInclude = false;
-        if (!hasPoints || currentRoute.isCombined || currentRoute.isCustomExport) {
-            shouldInclude = true;
-        } else {
-            if (w.isCustom || w.belongsToRoute !== undefined) {
-                if (w.belongsToRoute === activeIdx) shouldInclude = true;
+    
+    // 【修改點】：判斷使用哪一套航點處理邏輯
+    // 如果有 routeSelect 且選項大於 1，代表正在處理「含子路線」的 GPX
+    const isMultiRoute = routeSelect && routeSelect.options.length > 1;
+
+    if (isMultiRoute) {
+        // --- 執行你的第一段邏輯（篩選邏輯） ---
+        const rawWpts = currentRoute.waypoints || [];
+        rawWpts.forEach(w => {
+            let shouldInclude = false;
+            if (!hasPoints || currentRoute.isCombined || currentRoute.isCustomExport) {
+                shouldInclude = true;
             } else {
-                const wptTwDate = toTwDate(w.time);
-                if (targetDate && wptTwDate === targetDate) shouldInclude = true;
-                else if (!w.time) shouldInclude = true; 
+                if (w.isCustom || w.belongsToRoute !== undefined) {
+                    if (w.belongsToRoute === activeIdx) shouldInclude = true;
+                } else {
+                    const wptTwDate = toTwDate(w.time);
+                    if (targetDate && wptTwDate === targetDate) shouldInclude = true;
+                    else if (!w.time) shouldInclude = true; 
+                }
             }
-        }
-        if (shouldInclude) finalWpts.push(w);
-    });
+            if (shouldInclude) finalWpts.push(w);
+        });
+    } else {
+        // --- 執行你的第二段邏輯（單一路線全匯出） ---
+        finalWpts = (typeof allWpts !== 'undefined' && allWpts.length > 0) ? allWpts : (currentRoute.waypoints || []);
+    }
 
-
+    // 寫入航點到 XML
     finalWpts.forEach(w => {
         const name = escapeXml(w.name || "WayPoint");
         const safeTime = formatIsoTime(w.time); 
-        gpx += `\n  <wpt lat="${Number(w.lat).toFixed(6)}" lon="${Number(w.lon).toFixed(6)}">`;
+        // 根據邏輯決定是否使用 toFixed(6) (子路線用 toFixed，單一用原始)
+        const lat = isMultiRoute ? Number(w.lat).toFixed(6) : w.lat;
+        const lon = isMultiRoute ? Number(w.lon).toFixed(6) : w.lon;
+        
+        gpx += `\n  <wpt lat="${lat}" lon="${lon}">`;
         if (w.ele !== undefined) gpx += `\n    <ele>${Number(w.ele).toFixed(2)}</ele>`;
         gpx += `\n    <name>${name}</name>`;
         if (safeTime) gpx += `\n    <time>${safeTime}</time>`;
         gpx += `\n  </wpt>`;
     });
 
+    // 處理軌跡部分
     let tracksToExport = currentRoute.isCombined ? allTracks.filter(t => !t.isCombined) : [currentRoute];
     tracksToExport.forEach(route => {
         if (route.points?.length > 0) {
@@ -4088,7 +4102,10 @@ window.exportGpx = function(index) {
             gpx += `\n  <trk>\n    <name>${trkName}</name>\n    <trkseg>`;
             route.points.forEach(p => {
                 const safePTime = formatIsoTime(p.time); 
-                gpx += `\n      <trkpt lat="${Number(p.lat).toFixed(6)}" lon="${Number(p.lon).toFixed(6)}">`;
+                const pLat = isMultiRoute ? Number(p.lat).toFixed(6) : p.lat;
+                const pLon = isMultiRoute ? Number(p.lon).toFixed(6) : p.lon;
+                
+                gpx += `\n      <trkpt lat="${pLat}" lon="${pLon}">`;
                 if (p.ele !== undefined) gpx += `<ele>${Number(p.ele).toFixed(2)}</ele>`;
                 if (safePTime) gpx += `<time>${safePTime}</time>`;
                 gpx += `</trkpt>`;
@@ -4099,6 +4116,7 @@ window.exportGpx = function(index) {
 
     gpx += `\n</gpx>`;
 
+    // 下載
     const blob = new Blob([gpx], { type: 'application/gpx+xml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
