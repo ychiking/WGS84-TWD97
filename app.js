@@ -2,6 +2,12 @@
 const map = L.map("map", { tap: true }).setView([25.03, 121.56], 12);
 const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap" }).addTo(map);
 const otm = L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", { maxZoom: 18, maxNativeZoom: 17, attribution: 'OpenTopoMap' });
+
+var map3rd = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/GoogleMapsCompatible/{z}/{y}/{x}', {
+    attribution: '© <a href="https://maps.nlsc.gov.tw/">內政部國土測繪中心</a>',
+    maxZoom: 19,
+    minZoom: 7
+});
 // Happyman（當底圖）
 const happyman = L.tileLayer(
   "https://tile.happyman.idv.tw/map/happyman/{z}/{x}/{y}.png",
@@ -31,6 +37,12 @@ const rudyM = L.tileLayer(
   }
 );
 
+var topo3rd = L.tileLayer('https://gis.sinica.edu.tw/tileserver/file-exists.php?img=TM25K_2001-jpg-{z}-{x}-{y}', {
+    attribution: '經建三版地形圖 (中研院)',
+    maxZoom: 16,
+    minZoom: 7
+});
+
 const mapDiv = document.getElementById('map');
 const rsContainer = document.getElementById('routeSelectContainer');
 mapDiv.appendChild(rsContainer); 
@@ -58,7 +70,9 @@ const baseMaps = {
     "標準地圖 (OSM)": osm, 
     "魯地圖 (等高線)": rudyM,    
     "等高線地形圖 (OpenTopo)": otm,
-    "內政部臺灣通用電子地圖": emap 
+    "內政部臺灣通用電子地圖": emap,
+    "經建三版": topo3rd,
+    "正射影像圖":  map3rd
 };
 
 const overlayMaps = {
@@ -2572,6 +2586,10 @@ if (container) {
         if (typeof initWptSortable === 'function') {
             initWptSortable();
         }
+        
+       if (typeof initWptDragSelect === 'function') {
+            initWptDragSelect();
+        }
     }, 150);
 } else {
     
@@ -4885,3 +4903,80 @@ function updateXmlTrackName(stackIdx, oldName, newName) {
         }
     }
 }
+
+let isWptDragging = false;
+let wptDragTargetState = true;
+let wptDragStartPos = -1;
+let wptInitialStates = [];
+
+window.initWptDragSelect = function() {
+    const tableBody = document.getElementById("wptTableBody");
+    if (!tableBody) return;
+
+    
+    tableBody.onmousedown = null;
+    tableBody.onmouseover = null;
+
+    tableBody.addEventListener('mousedown', function(e) {
+        
+        const row = e.target.closest('tr');
+        if (!row) return;
+
+        const checkbox = row.querySelector('.wpt-checkbox');
+        const isCheckboxCell = e.target.classList.contains('wpt-checkbox') || e.target.closest('td').contains(checkbox);
+        
+        if (isCheckboxCell && checkbox) {
+            isWptDragging = true;
+            wptDragStartPos = row.sectionRowIndex;
+
+            
+            
+            wptDragTargetState = !checkbox.checked;
+            checkbox.checked = wptDragTargetState;
+
+            
+            const allBoxes = tableBody.querySelectorAll('.wpt-checkbox');
+            wptInitialStates = Array.from(allBoxes).map(cb => cb.checked);
+
+            
+            if (typeof updateSelectedCount === 'function') updateSelectedCount();
+
+            
+            
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    }, { capture: true }); 
+
+    tableBody.addEventListener('mouseover', function(e) {
+        if (!isWptDragging) return;
+
+        const currentRow = e.target.closest('tr');
+        if (!currentRow) return;
+
+        const currentPos = currentRow.sectionRowIndex;
+        const allBoxes = tableBody.querySelectorAll('.wpt-checkbox');
+
+        const start = Math.min(wptDragStartPos, currentPos);
+        const end = Math.max(wptDragStartPos, currentPos);
+
+        allBoxes.forEach((cb, i) => {
+            if (i >= start && i <= end) {
+                cb.checked = wptDragTargetState;
+            } else {
+                
+                cb.checked = wptInitialStates[i];
+            }
+        });
+
+        if (typeof updateSelectedCount === 'function') updateSelectedCount();
+    });
+
+    const stopDrag = () => {
+        if (isWptDragging) {
+            isWptDragging = false;
+        }
+    };
+
+    window.addEventListener('mouseup', stopDrag);
+};

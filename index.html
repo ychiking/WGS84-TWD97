@@ -14,6 +14,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+  <script src="https://unpkg.com/leaflet-tilelayer-wmts/dist/leaflet-tilelayer-wmts.js"></script>
 
   <style>
 
@@ -688,12 +689,24 @@
 .drag-handle:hover {
     color: #1a73e8 !important;
 }
+
+.wpt-table {
+    user-select: none;
+}
+
+.wpt-table tbody tr:hover {
+    background-color: rgba(26, 115, 232, 0.05);
+}
+
+.wpt-tableBody.is-dragging {
+    cursor: cell;
+}
   </style>
 </head>
 
 <body>
   <div id="header">
-    <strong style="font-size: 12px; color: #333;">YCHiking-GPX 路線檢視工具 v2605073</strong>
+    <strong style="font-size: 12px; color: #333;">YCHiking-GPX 路線檢視工具 v2605081</strong>
     <div class="upload-row">
       <input type="file" id="gpxInput" accept=".gpx" style="display: none;" />
       <input type="file" id="multiGpxInput" accept=".gpx" multiple style="display: none;" />
