@@ -4916,20 +4916,23 @@ window.initWptDragSelect = function() {
     
     tableBody.onmousedown = null;
     tableBody.onmouseover = null;
+    tableBody.ontouchstart = null;
 
-    tableBody.addEventListener('mousedown', function(e) {
-        
-        const row = e.target.closest('tr');
+    
+    const handleStart = (e) => {
+        const target = e.target;
+        const row = target.closest('tr');
         if (!row) return;
 
         const checkbox = row.querySelector('.wpt-checkbox');
-        const isCheckboxCell = e.target.classList.contains('wpt-checkbox') || e.target.closest('td').contains(checkbox);
         
-        if (isCheckboxCell && checkbox) {
+        const td = target.closest('td');
+        
+        
+        if (checkbox && td && td.contains(checkbox)) {
             isWptDragging = true;
             wptDragStartPos = row.sectionRowIndex;
 
-            
             
             wptDragTargetState = !checkbox.checked;
             checkbox.checked = wptDragTargetState;
@@ -4938,45 +4941,63 @@ window.initWptDragSelect = function() {
             const allBoxes = tableBody.querySelectorAll('.wpt-checkbox');
             wptInitialStates = Array.from(allBoxes).map(cb => cb.checked);
 
-            
             if (typeof updateSelectedCount === 'function') updateSelectedCount();
 
             
-            
-            e.preventDefault();
-            e.stopPropagation();
-        }
-    }, { capture: true }); 
-
-    tableBody.addEventListener('mouseover', function(e) {
-        if (!isWptDragging) return;
-
-        const currentRow = e.target.closest('tr');
-        if (!currentRow) return;
-
-        const currentPos = currentRow.sectionRowIndex;
-        const allBoxes = tableBody.querySelectorAll('.wpt-checkbox');
-
-        const start = Math.min(wptDragStartPos, currentPos);
-        const end = Math.max(wptDragStartPos, currentPos);
-
-        allBoxes.forEach((cb, i) => {
-            if (i >= start && i <= end) {
-                cb.checked = wptDragTargetState;
-            } else {
+            if (e.type === 'touchstart') {
                 
-                cb.checked = wptInitialStates[i];
+                
+            } else {
+                e.preventDefault();
             }
-        });
-
-        if (typeof updateSelectedCount === 'function') updateSelectedCount();
-    });
-
-    const stopDrag = () => {
-        if (isWptDragging) {
-            isWptDragging = false;
         }
     };
 
-    window.addEventListener('mouseup', stopDrag);
+    const handleMove = (e) => {
+        if (!isWptDragging) return;
+
+        let targetRow;
+        if (e.type === 'touchmove') {
+            
+            const touch = e.touches[0];
+            const element = document.elementFromPoint(touch.clientX, touch.clientY);
+            targetRow = element ? element.closest('tr') : null;
+        } else {
+            targetRow = e.target.closest('tr');
+        }
+
+        if (targetRow) {
+            const currentPos = targetRow.sectionRowIndex;
+            const allBoxes = tableBody.querySelectorAll('.wpt-checkbox');
+            const start = Math.min(wptDragStartPos, currentPos);
+            const end = Math.max(wptDragStartPos, currentPos);
+
+            allBoxes.forEach((cb, i) => {
+                if (i >= start && i <= end) {
+                    cb.checked = wptDragTargetState;
+                } else {
+                    cb.checked = wptInitialStates[i];
+                }
+            });
+
+            if (typeof updateSelectedCount === 'function') updateSelectedCount();
+            
+            
+            if (e.type === 'touchmove') e.preventDefault();
+        }
+    };
+
+    const handleEnd = () => {
+        isWptDragging = false;
+    };
+
+    
+    tableBody.addEventListener('mousedown', handleStart);
+    tableBody.addEventListener('mouseover', handleMove);
+    window.addEventListener('mouseup', handleEnd);
+
+    
+    tableBody.addEventListener('touchstart', handleStart, { passive: false });
+    tableBody.addEventListener('touchmove', handleMove, { passive: false });
+    window.addEventListener('touchend', handleEnd);
 };
