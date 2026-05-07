@@ -2498,7 +2498,7 @@ listHtml += `
             <tr>
                 <th style="width:2%"></th> 
                 <th style="width:2%"><input type="checkbox" id="selectAllWpts" onclick="toggleSelectAll(this)"></th>
-                <th style="width:3%">#</th>
+                <th style="width:5%">#</th>
                 <th style="width:30%">時間</th>
                 <th style="width:40%">名稱</th>
                 <th style="width:20%">操作</th>
