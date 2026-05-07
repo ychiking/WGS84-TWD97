@@ -13,6 +13,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
 
   <style>
 
@@ -677,12 +678,22 @@
 .leaflet-control {
     margin-right: 10px !important;
 }
+
+.sortable-ghost {
+    background-color: #f0f7ff !important;
+    opacity: 0.5;
+    border: 1px dashed #1a73e8;
+}
+
+.drag-handle:hover {
+    color: #1a73e8 !important;
+}
   </style>
 </head>
 
 <body>
   <div id="header">
-    <strong style="font-size: 12px; color: #333;">YCHiking-GPX 路線檢視工具 v2605071</strong>
+    <strong style="font-size: 12px; color: #333;">YCHiking-GPX 路線檢視工具 v2605072</strong>
     <div class="upload-row">
       <input type="file" id="gpxInput" accept=".gpx" style="display: none;" />
       <input type="file" id="multiGpxInput" accept=".gpx" multiple style="display: none;" />
@@ -783,7 +794,6 @@
       </div>
     </div>
   </div>
-  
 	<button id="toggleChartBtn" onclick="toggleElevationChart()" style="display: none;">展開/收合高度表</button>
 			<div id="wptEditModal" class="wpt-modal-overlay">
   <div class="wpt-modal-content" onclick="event.stopPropagation()">

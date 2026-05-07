@@ -1143,61 +1143,136 @@ function loadRoute(index, customColor = null) {
             return true;
         });
 
-        displayWaypoints.forEach((w) => {
-            let tIdx = null; 
-            if (trackPoints && trackPoints.length > 0) {
-                let minD = Infinity;
-                let nearestIdx = -1;
-                trackPoints.forEach((tp, pi) => {
-                    let d = Math.sqrt((w.lat - tp.lat) ** 2 + (w.lon - tp.lon) ** 2);
-                    if (d < minD) { minD = d; nearestIdx = pi; }
-                });
-                if (nearestIdx !== -1 && minD <= 0.00015) {
-                    tIdx = nearestIdx;
-                }
-            }
-
-            const wm = L.marker([w.lat, w.lon], { icon: wptIcon }).addTo(map);
-            const isAlways = typeof showWptNameAlways !== 'undefined' && showWptNameAlways;
-            wm.bindTooltip(w.name, { 
-                permanent: isAlways, 
-                direction: isAlways ? 'right' : 'top', 
-                offset: isAlways ? [10, 0] : [0, -10],
-                className: isAlways ? 'wpt-label-label' : ''
-            });
-            if (isAlways) wm.openTooltip();
-
-            wm.on('click', (e) => { 
-                L.DomEvent.stopPropagation(e); 
-                if (tIdx !== null && trackPoints && trackPoints[tIdx]) {
-                    const progressBar = document.getElementById('gpxProgressBar');
-                    if (progressBar) {
-                        progressBar.value = tIdx;
-                        progressBar.dispatchEvent(new Event('input', { bubbles: true }));
-                    }
-                    if (typeof chart !== 'undefined' && chart) {
-                        const meta = chart.getDatasetMeta(0);
-                        const point = meta.data[tIdx];
-                        if (point) {
-                            chart.setActiveElements([{ datasetIndex: 0, index: tIdx }]);
-                            chart.tooltip.setActiveElements([{ datasetIndex: 0, index: tIdx }], { x: point.x, y: point.y });
-                            chart.update('none');
-                        }
-                    }
-                    if (!hoverMarker) {
-                        hoverMarker = L.circleMarker([trackPoints[tIdx].lat, trackPoints[tIdx].lon], {
-                            radius: 7, color: '#ffffff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1
-                        }).addTo(map);
-                    } else {
-                        hoverMarker.setLatLng([trackPoints[tIdx].lat, trackPoints[tIdx].lon]).addTo(map).bringToFront();
-                    }
-                } else if (hoverMarker) {
-                    hoverMarker.setLatLng([w.lat, w.lon]).addTo(map).bringToFront();
-                }
-                showCustomPopup(tIdx, w.name, "wpt", w.lat, w.lon); 
-            });
-            wptMarkers.push(wm);
+displayWaypoints.forEach((w) => {
+    let initialTIdx = null; 
+    if (trackPoints && trackPoints.length > 0) {
+        let minD = Infinity;
+        let nearestIdx = -1;
+        trackPoints.forEach((tp, pi) => {
+            let d = Math.sqrt((w.lat - tp.lat) ** 2 + (w.lon - tp.lon) ** 2);
+            if (d < minD) { minD = d; nearestIdx = pi; }
         });
+        if (nearestIdx !== -1 && minD * 111000 <= 15) {
+            initialTIdx = nearestIdx;
+        }
+    }
+
+    const wm = L.marker([w.lat, w.lon], { 
+        icon: wptIcon, 
+        draggable: true 
+    }).addTo(map);
+    
+    let previousLatLng = wm.getLatLng();
+    let wasOnPath = (initialTIdx !== null);
+
+    const isAlways = typeof showWptNameAlways !== 'undefined' && showWptNameAlways;
+    wm.bindTooltip(w.name, { 
+        permanent: isAlways, direction: isAlways ? 'right' : 'top', 
+        offset: isAlways ? [10, 0] : [0, -10],
+        className: isAlways ? 'wpt-label-label' : ''
+    });
+    if (isAlways) wm.openTooltip();
+
+    wm.on('dragend', function(event) {
+    const marker = event.target;
+    const newLatLng = marker.getLatLng();
+    const newLat = newLatLng.lat;
+    const newLon = newLatLng.lng;
+
+    let nearestIdx = -1;
+    let minD = Infinity;
+    if (trackPoints && trackPoints.length > 0) {
+        trackPoints.forEach((tp, pi) => {
+            const d = Math.sqrt((newLat - tp.lat) ** 2 + (newLon - tp.lon) ** 2);
+            if (d < minD) { minD = d; nearestIdx = pi; }
+        });
+    }
+    const isOnPath = (nearestIdx !== -1 && (minD * 111000 <= 15));
+
+    let confirmMsg = isOnPath 
+        ? `確定將「${w.name}」移至此路徑位置？\n(高度、距離與時間將同步更新)`
+        : (wasOnPath ? `確定將「${w.name}」移至此處？\n(此處不在路徑上，將遺失高度、距離與時間資訊)` 
+                    : `確定將「${w.name}」移至此處？\n(此處不在路徑上，將遺失高度與時間資訊)`);
+
+    if (confirm(confirmMsg)) {
+        
+        window.isDraggingWpt = true; 
+
+        const updateLogic = (targetWpt) => {
+            targetWpt.lat = newLat;
+            targetWpt.lon = newLon;
+            if (isOnPath) {
+                const tp = trackPoints[nearestIdx];
+                targetWpt.ele = tp.ele;
+                targetWpt.time = tp.time;
+                targetWpt.localTime = tp.timeLocal;
+                targetWpt.distance = tp.distance;
+            } else {
+                targetWpt.ele = 0;
+                targetWpt.time = new Date().toISOString();
+                targetWpt.localTime = formatDate(new Date(new Date().getTime() + 8 * 3600000));
+                targetWpt.distance = undefined;
+            }
+        };
+
+        syncCombinedWaypoints(w.name, previousLatLng, w.time, updateLogic);
+        updateLogic(w);
+        updateRawGpxContent(w.name, previousLatLng, newLat, newLon);
+
+        previousLatLng = newLatLng;
+        wasOnPath = isOnPath;
+
+        
+        map.closePopup(); 
+        
+        
+        loadRoute(window.currentActiveIndex || 0); 
+
+        
+        setTimeout(() => { 
+            map.closePopup(); 
+            window.isDraggingWpt = false; 
+        }, 100); 
+
+        if (typeof renderWaypointsAndPeaks === 'function') {
+            renderWaypointsAndPeaks(sel); 
+        }
+
+        
+        map.eachLayer(layer => {
+            if (layer instanceof L.CircleMarker && layer.options.radius === 7) map.removeLayer(layer);
+        });
+        window.activeFocusCircle = L.circleMarker([newLat, newLon], {
+            radius: 7, color: '#ffffff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1, interactive: false 
+        }).addTo(map);
+
+        if (isOnPath && document.getElementById('gpxProgressBar')) {
+            const progressBar = document.getElementById('gpxProgressBar');
+            progressBar.value = nearestIdx;
+            progressBar.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    } else {
+        marker.setLatLng(previousLatLng);
+        window.isDraggingWpt = false; 
+    }
+});
+
+    wm.on('click', (e) => { 
+        L.DomEvent.stopPropagation(e); 
+        
+        let clickTIdx = null;
+        if (trackPoints && trackPoints.length > 0) {
+            let minD = Infinity;
+            trackPoints.forEach((tp, pi) => {
+                let d = Math.sqrt((w.lat - tp.lat) ** 2 + (w.lon - tp.lon) ** 2);
+                if (d < minD) { minD = d; clickTIdx = pi; }
+            });
+            if (minD * 111000 > 15) clickTIdx = null;
+        }
+        showCustomPopup(clickTIdx !== null ? clickTIdx : 999999, w.name, clickTIdx !== null ? "wpt" : 0, w.lat, w.lon); 
+    });
+    wptMarkers.push(wm);
+});
     }
 
     const startLat = (trackPoints.length > 0) ? trackPoints[0].lat : (sel.waypoints?.[0]?.lat || null);
@@ -1634,14 +1709,17 @@ window.togglePopupDetail = function() {
 };
 
 function showCustomPopup(idx, title, typeOrEle = null, realLat = null, realLon = null) {
+    if (window.isDraggingWpt === true) return;
     const isWptMode = (typeOrEle === "wpt");
-    const lat = (isWptMode || realLat !== null) ? realLat : (trackPoints[idx] ? trackPoints[idx].lat : null);
-    const lon = (isWptMode || realLon !== null) ? realLon : (trackPoints[idx] ? trackPoints[idx].lon : null);
+    
+    
+    
+    const lat = (realLat !== null) ? realLat : (trackPoints[idx] ? trackPoints[idx].lat : null);
+    const lon = (realLon !== null) ? realLon : (trackPoints[idx] ? trackPoints[idx].lon : null);
 
     if (lat === null || lon === null) return;
 
     map.eachLayer(layer => {
-
         if (layer instanceof L.CircleMarker && layer.options.radius === 7) {
             map.removeLayer(layer);
         }
@@ -1653,9 +1731,15 @@ function showCustomPopup(idx, title, typeOrEle = null, realLat = null, realLon =
     }).addTo(map);
 
     
+    
     let matchedPoint = (idx !== null && idx !== 999999 && typeof trackPoints !== 'undefined' && trackPoints[idx]) ? trackPoints[idx] : null;
     
-    
+    if (matchedPoint) {
+        
+        const d = Math.sqrt(Math.pow(matchedPoint.lat - lat, 2) + Math.pow(matchedPoint.lon - lon, 2));
+        if (d * 111000 > 5) matchedPoint = null; 
+    }
+
     if (!matchedPoint && typeof trackPoints !== 'undefined') {
         const foundIdx = trackPoints.findIndex(p => 
             Math.abs(p.lat - lat) < 0.00015 && Math.abs(p.lon - lon) < 0.00015
@@ -1665,28 +1749,30 @@ function showCustomPopup(idx, title, typeOrEle = null, realLat = null, realLon =
             idx = foundIdx; 
         }
     }
-    
 
     let waypointIdx = -1;
     let waypointTime = null;
     let finalTitle = title;
     let targetGpx = null;
+    let foundEle = null; 
 
     const activeIdx = (typeof window.currentActiveIndex !== 'undefined') ? window.currentActiveIndex : 0;
     let potentialSources = [];
     if (window.allTracks) potentialSources = [...window.allTracks];
     if (window.multiGpxStack) potentialSources = [...potentialSources, ...window.multiGpxStack];
 
+    
     for (let gpx of potentialSources) {
         if (!gpx || !gpx.waypoints) continue;
-        let foundIdx = gpx.waypoints.findIndex(w =>
-            Math.abs(w.lat - lat) < 0.00015 && Math.abs(w.lon - lon) < 0.00015
+        let fIdx = gpx.waypoints.findIndex(w =>
+            Math.abs(w.lat - lat) < 0.0001 && Math.abs(w.lon - lon) < 0.0001
         );
-        if (foundIdx !== -1) {
-            waypointIdx = foundIdx;
+        if (fIdx !== -1) {
+            waypointIdx = fIdx;
             targetGpx = gpx;
             const wptData = gpx.waypoints[waypointIdx];
             finalTitle = wptData.name;
+            foundEle = wptData.ele; 
             waypointTime = wptData.localTime || (wptData.time ? new Date(wptData.time).toLocaleString() : null);
             break;
         }
@@ -1696,11 +1782,12 @@ function showCustomPopup(idx, title, typeOrEle = null, realLat = null, realLon =
     let eleValue = 0;
     if (matchedPoint && matchedPoint.ele) {
         eleValue = matchedPoint.ele;
+    } else if (foundEle !== null) {
+        eleValue = foundEle; 
     } else if (offPathEle !== null) {
         eleValue = offPathEle;
-    } else if (waypointIdx !== -1 && targetGpx && targetGpx.waypoints[waypointIdx].ele) {
-        eleValue = targetGpx.waypoints[waypointIdx].ele;
     }
+    
     const eleDisplay = (eleValue !== 0) ? eleValue.toFixed(0) : "---";
     const dist = (matchedPoint && matchedPoint.distance !== undefined) ? matchedPoint.distance.toFixed(2) : null;
     const displayTime = (matchedPoint && matchedPoint.timeLocal) ? matchedPoint.timeLocal :
@@ -2364,75 +2451,86 @@ window.renderWaypointsAndPeaks = function(currentRoute) {
     .filter(w => {
         
         if (activeIdx === 0) return true;
-
-        
-        if (w.belongsToRoute !== undefined) return w.belongsToRoute === activeIdx;
-
-        
+        if (w.belongsToRoute !== undefined) return w.belongsToRoute === activeIdx;     
         const wTimeVal = w.time ? new Date(w.time).getTime() : null;
-        
-        
         const isNative = route.waypoints && route.waypoints.some(rawW => 
             Math.abs(rawW.lat - w.lat) < 0.0001 && 
             Math.abs(rawW.lon - w.lon) < 0.0001 && 
             String(rawW.name) === String(w.name)
         );
-
-        
+      
         const isTrekDayPoint = wTimeVal && startTime && Math.abs(wTimeVal - startTime) < (48 * 60 * 60 * 1000);
-        
-        
+       
         let isInTimeRange = (startTime && endTime && wTimeVal) ? (wTimeVal >= startTime && wTimeVal <= endTime) : false;
 
-        
-
-        if (isNative) {
-            
-            
+        if (isNative) {     
             if (isTrekDayPoint && !isInTimeRange) {
                 return false; 
-            }
-            
-            
+            }    
             return true;
         }
-
-        
-        
         const isNearby = currentTrackPts.some(tp => (Math.pow(w.lat - tp.lat, 2) + Math.pow(w.lon - tp.lon, 2)) < 0.00000324);
         return isNearby;
     });
-
-    
-    
     const uniqueWpts = filteredWpts.filter((v, i, a) => 
         a.findIndex(t => t.name === v.name && t.localTime === v.localTime) === i
     );
-
-    
     if (uniqueWpts.length > 0) {
-        const icon = (typeof showWptNameAlways !== 'undefined' && showWptNameAlways) ? "visibility_off" : "visibility";
-        shortcutsHtml += `<button type="button" class="shortcut-btn" onclick="toggleWptNames()" style="display:inline-flex; align-items:center;"><span class="material-icons" style="font-size:18px; margin-right:4px;">${icon}</span><span>航點名稱</span></button>`;
-        shortcutsHtml += `<button type="button" class="shortcut-btn" onclick="document.getElementById('anchorWpt').scrollIntoView({behavior: 'smooth'})">📍 航點列表</button>`;
+    const icon = (typeof showWptNameAlways !== 'undefined' && showWptNameAlways) ? "visibility_off" : "visibility";
+    
+    shortcutsHtml += `<button type="button" class="shortcut-btn" onclick="toggleWptNames()" style="display:inline-flex; align-items:center;"><span class="material-icons" style="font-size:18px; margin-right:4px;">${icon}</span><span>航點名稱</span></button>`;
+    shortcutsHtml += `<button type="button" class="shortcut-btn" onclick="document.getElementById('anchorWpt').scrollIntoView({behavior: 'smooth'})">📍 航點列表</button>`;
+    listHtml += `<h4 id="anchorWpt" style="margin: 20px 0 10px 0;">📍 航點列表 (${uniqueWpts.length})</h4>`;
 
-        listHtml += `<h4 id="anchorWpt" style="margin: 20px 0 10px 0;">📍 航點列表 (${uniqueWpts.length})</h4>`;
-        listHtml += `<table class="wpt-table"><thead><tr><th style="width:10%">#</th><th style="width:35%">時間</th><th style="width:35%">名稱</th><th style="width:20%">操作</th></tr></thead><tbody>`;
+    listHtml += `
+        <div class="wpt-table-toolbar" style="margin-bottom: 10px; display: flex; gap: 10px; align-items: center;">
+            <button type="button" onclick="deleteSelectedWaypoints()" class="btn-delete-multi" style="background: #d32f2f; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; font-size: 13px;">
+                <span class="material-icons" style="font-size: 18px; margin-right: 5px;">delete_sweep</span> 刪除勾選項目
+            </button>
+            <span id="selectedCount" style="font-size: 12px; color: #666;">已選取 0 項</span>
+        </div>
+    `;
+
+
+listHtml += `
+    <table class="wpt-table">
+        <thead>
+            <tr>
+                <th style="width:2%"></th> 
+                <th style="width:2%"><input type="checkbox" id="selectAllWpts" onclick="toggleSelectAll(this)"></th>
+                <th style="width:3%">#</th>
+                <th style="width:30%">時間</th>
+                <th style="width:40%">名稱</th>
+                <th style="width:20%">操作</th>
+            </tr>
+        </thead>
+        <tbody id="wptTableBody">`; 
+
+
+uniqueWpts.forEach((w, displayIdx) => {
+    const displayTime = w.localTime || (w.time ? new Date(w.time).toLocaleString() : "無時間資訊");
+    
+    
+    listHtml += `<tr data-idx="${w.originalIdx}">
+        <td class="drag-handle" style="cursor: grab; color: #ccc;"><span class="material-icons">drag_indicator</span></td>
         
-        uniqueWpts.forEach((w, displayIdx) => {
-            const displayTime = w.localTime || (w.time ? new Date(w.time).toLocaleString() : "無時間資訊");
-            
-            listHtml += `<tr>
-                <td><span class="wpt-link" onclick="focusWaypoint(${w.lat}, ${w.lon}, '${w.name}')">${displayIdx + 1}</span></td>
-                <td>${displayTime}</td>
-                <td>${w.name}</td>
-                <td>
-                    <span class="material-icons wpt-action-icon" onclick="handleWptEdit(${w.originalIdx}, ${w.lat}, ${w.lon}, ${w.ele || 0}, '${w.name}', '${w.localTime || ''}')">edit</span>
-                    <span class="material-icons wpt-action-icon wpt-delete-icon" onclick="deleteWaypoint(${w.originalIdx})">delete</span>
-                </td>
-            </tr>`;
-        });
-        listHtml += `</tbody></table>`;
-    }
+        <td><input type="checkbox" class="wpt-checkbox" data-idx="${w.originalIdx}" onchange="updateSelectedCount()"></td>
+        
+        <td><span class="wpt-link" onclick="focusWaypointWithLog(${w.originalIdx}, '${w.name}')">${displayIdx + 1}</span></td>
+        
+        <td>${displayTime}</td>
+        
+        <td>${w.name}</td>
+        
+        <td>
+            <span class="material-icons wpt-action-icon" onclick="handleWptEditByIndex(${w.originalIdx})">edit</span>
+            <span class="material-icons wpt-action-icon wpt-delete-icon" onclick="deleteWaypoint(${w.originalIdx})">delete</span>
+        </td>
+    </tr>`;
+});
+
+listHtml += `</tbody></table>`;
+}
 
     
     listHtml += `<h4 id="anchorPeak" style="margin: 30px 0 10px 0; font-size: 16px; color: #2c3e50; border-left: 5px solid #d35400; padding-left: 10px;">⛰️ 沿途山岳(200公尺內)</h4>`;
@@ -2449,6 +2547,23 @@ window.renderWaypointsAndPeaks = function(currentRoute) {
     wptListContainer.innerHTML = listHtml;
     wptListContainer.style.display = "block";
     if (navShortcuts) navShortcuts.innerHTML = shortcutsHtml;
+    
+    const container = document.getElementById('wptList'); 
+
+if (container) {
+    
+    container.innerHTML = listHtml; 
+
+    
+    setTimeout(() => {
+        if (typeof initWptSortable === 'function') {
+            initWptSortable();
+        }
+    }, 150);
+} else {
+    
+    console.error("❌ 錯誤：找不到 id 為 'wptListContainer' 的元素，請檢查 HTML 結構。");
+}
 };
 
 function formatDate(d) { return d.toISOString().replace("T", " ").substring(0, 19); }
@@ -3585,7 +3700,7 @@ function showGpxManagementModal() {
             <div style="flex: 1; overflow-y:auto; padding-right:5px;">`;
     
     multiGpxStack.forEach((gpx, i) => {
-        // 修改：讓當前使用中的軌跡也能勾選，以便參與合併
+        
         const isChecked = gpx.visible !== false ? 'checked' : '';
         const isFocused = (window.currentMultiIndex === i);
         
@@ -3623,12 +3738,12 @@ function showGpxManagementModal() {
     modal.innerHTML = listHtml;
 }
 
-// 輔助函式：確保 toggle 狀態有存回 multiGpxStack
+
 function toggleGpxVisibility(idx) {
     const chk = document.getElementById(`gpx-chk-${idx}`);
     if (multiGpxStack[idx]) {
         multiGpxStack[idx].visible = chk.checked;
-        if (typeof toggleGpx === 'function') toggleGpx(idx); // 呼叫原本的圖層切換
+        if (typeof toggleGpx === 'function') toggleGpx(idx); 
     }
 }
 
@@ -3820,7 +3935,6 @@ function processSave(finalName, finalEle) {
             localTime: getNowStr(), 
             ele: parseFloat(finalEle) || 0
         };
-        
         if (originalIdx !== null && originalIdx !== undefined && timeStr) {
             const formattedTime = formatToStandard(timeStr);
             targetWpt.time = formattedTime;
@@ -3829,7 +3943,6 @@ function processSave(finalName, finalEle) {
         multiGpxStack[stackIdx].waypoints.push(targetWpt);
     }
 
-    
     if (allTracks.length === 0) {
         allTracks.push(multiGpxStack[stackIdx]);
     } else {
@@ -3838,43 +3951,114 @@ function processSave(finalName, finalEle) {
 
     try {
         if (typeof updateWptTable === 'function') updateWptTable();
-        
         if (typeof renderWaypointsAndPeaks === 'function') renderWaypointsAndPeaks(allTracks[activeIdx]);
     } catch (e) {}
 
     if (existingIdx !== null && existingIdx !== -1) {
         if (typeof loadRoute === 'function') {
             loadRoute(activeIdx); 
+            
+            if (!window.isDraggingWpt) {
+                setTimeout(() => { showCustomPopup(originalIdx, finalName, "wpt", lat, lon); }, 350);
+            }
+            return; 
         }
     } else {
         const marker = L.marker([lat, lon], { 
-            icon: (typeof wptIcon !== 'undefined' ? wptIcon : new L.Icon.Default()) 
+            icon: (typeof wptIcon !== 'undefined' ? wptIcon : new L.Icon.Default()),
+            draggable: true 
         }).addTo(map);
 
+        let previousLatLng = marker.getLatLng();
         
-        marker.bindTooltip(finalName, { 
-            permanent: false, 
-            direction: 'top', 
-            offset: [0, -10] 
-        });
+        const isAlways = typeof showWptNameAlways !== 'undefined' && showWptNameAlways;
+				marker.bindTooltip(finalName, { 
+				    permanent: isAlways, 
+				    direction: isAlways ? 'right' : 'top', 
+				    offset: isAlways ? [10, 0] : [0, -10],
+				    className: isAlways ? 'wpt-label-label' : ''
+				});
+				if (isAlways) marker.openTooltip();
 
-        
+        marker.on('dragend', function(event) {
+            
+            window.isDraggingWpt = true; 
+            
+            const m = event.target;
+            const newLatLng = m.getLatLng();
+            const newLat = newLatLng.lat;
+            const newLon = newLatLng.lng;
+
+            let nIdx = -1; let mD = Infinity;
+            if (typeof trackPoints !== 'undefined' && trackPoints && trackPoints.length > 0) {
+                trackPoints.forEach((tp, pi) => {
+                    const d = Math.sqrt(Math.pow(newLat - tp.lat, 2) + Math.pow(newLon - tp.lon, 2));
+                    if (d < mD) { mD = d; nIdx = pi; }
+                });
+            }
+            const isOnPath = (nIdx !== -1 && (mD * 111000 <= 15));
+
+            let msg = isOnPath 
+                ? `確定將「${finalName}」移至此路徑位置？\n(高度、距離與時間將同步更新)`
+                : `確定將「${finalName}」移至此處？\n(此處不在路徑上，將遺失高度與時間資訊)`;
+            
+            if (confirm(msg)) {
+                targetWpt.lat = newLat;
+                targetWpt.lon = newLon;
+                if (isOnPath) {
+                    const tp = trackPoints[nIdx];
+                    targetWpt.ele = tp.ele; targetWpt.time = tp.time; targetWpt.localTime = tp.timeLocal;
+                } else {
+                    targetWpt.ele = 0; targetWpt.time = new Date().toISOString(); targetWpt.localTime = getNowStr();
+                }
+
+                if (typeof updateRawGpxContent === 'function') {
+                    updateRawGpxContent(finalName, previousLatLng, newLat, newLon);
+                }
+
+                previousLatLng = newLatLng;
+                map.closePopup();
+
+                
+                map.eachLayer(layer => {
+                    if (layer instanceof L.CircleMarker && layer.options.radius === 7) map.removeLayer(layer);
+                });
+
+                if (typeof renderWaypointsAndPeaks === 'function') renderWaypointsAndPeaks(allTracks[activeIdx]);
+                
+                window.activeFocusCircle = L.circleMarker([newLat, newLon], {
+                    radius: 7, color: '#ffffff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1, interactive: false 
+                }).addTo(map);
+
+                if (isOnPath && document.getElementById('gpxProgressBar')) {
+                    const progressBar = document.getElementById('gpxProgressBar');
+                    progressBar.value = nIdx;
+                    progressBar.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                
+                
+                setTimeout(() => { window.isDraggingWpt = false; }, 800); 
+
+            } else {
+                m.setLatLng(previousLatLng);
+                window.isDraggingWpt = false;
+            }
+        });
 
         marker.on('click', (e) => {
             L.DomEvent.stopPropagation(e);
-            showCustomPopup(originalIdx, finalName, finalEle, lat, lon);
+            showCustomPopup(originalIdx, finalName, "wpt", marker.getLatLng().lat, marker.getLatLng().lng);
         });
 
-        if (typeof wptMarkers !== 'undefined') {
-            wptMarkers.push(marker);
-        }
+        if (typeof wptMarkers !== 'undefined') wptMarkers.push(marker);
     }
     
     setTimeout(() => { 
+        
+        if (window.isDraggingWpt) return;
+
         map.eachLayer((layer) => {
-            if (layer instanceof L.CircleMarker && !(layer instanceof L.Marker)) {
-                map.removeLayer(layer);
-            }
+            if (layer instanceof L.CircleMarker && !(layer instanceof L.Marker)) map.removeLayer(layer);
         });
 
         window.activeFocusCircle = L.circleMarker([lat, lon], {
@@ -3882,79 +4066,41 @@ function processSave(finalName, finalEle) {
         }).addTo(map);
 
         let targetIdx = parseInt(originalIdx);
-
-        if ((isNaN(targetIdx) || targetIdx === -1 || targetIdx === 999999) && typeof trackPoints !== 'undefined') {
-            const minThreshold = 0.0005; 
+        if ((isNaN(targetIdx) || targetIdx === -1) && typeof trackPoints !== 'undefined') {
             let minD = Infinity;
             trackPoints.forEach((p, i) => {
                 const d = Math.abs(p.lat - lat) + Math.abs(p.lon - lon);
-                if (d < minD) {
-                    minD = d;
-                    targetIdx = i;
-                }
+                if (d < minD) { minD = d; targetIdx = i; }
             });
-            if (minD > minThreshold) targetIdx = -1;
-        }
-
-        if (targetIdx !== -1 && !isNaN(targetIdx)) {
-            const progressBar = document.getElementById('gpxProgressBar');
-            if (progressBar) {
-                progressBar.value = targetIdx;
-                progressBar.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        }
-
-        if (typeof wptMarkers !== 'undefined' && wptMarkers.length === 0) {
-            const marker = L.marker([lat, lon], { 
-                icon: (typeof wptIcon !== 'undefined' ? wptIcon : new L.Icon.Default()) 
-            }).addTo(map);
-            
-            
-            marker.bindTooltip(finalName, { 
-                permanent: false, 
-                direction: 'top', 
-                offset: [0, -10] 
-            });
-
-            marker.on('click', (e) => {
-                L.DomEvent.stopPropagation(e);
-                if (window.activeFocusCircle) window.activeFocusCircle.setLatLng(e.target.getLatLng());
-                showCustomPopup(targetIdx, finalName, "wpt", lat, lon);
-            });
-            wptMarkers.push(marker);
+            if (minD > 0.0005) targetIdx = 999999;
         }
 
         showCustomPopup(targetIdx, finalName, "wpt", lat, lon); 
-        renderRouteInfo()
-        
+        renderRouteInfo();
     }, 350); 
 }
 
 window.deleteWaypoint = function(idx) {
     const modal = document.getElementById('deleteConfirmModal');
-    
-    if (!modal) {
-        console.error("❌ 錯誤：找不到 id 為 'deleteConfirmModal' 的 HTML 元素！");
-        return;
-    }
+    if (!modal) return;
+
+    const pTag = modal.querySelector('p');
+    if (pTag) pTag.innerHTML = `此動作無法復原。<br>您確定要刪除此航點？`;
+
     const confirmBtn = document.getElementById('modalDeleteConfirm');
     const cancelBtn = document.getElementById('modalDeleteCancel');
 
-    
     modal.style.display = 'flex';
 
-    
     confirmBtn.onclick = function() {
         executeDelete(idx);
         modal.style.display = 'none';
+        if (typeof updateSelectedCount === 'function') updateSelectedCount();
     };
 
-    
     cancelBtn.onclick = function() {
- 
         modal.style.display = 'none';
     };
-
 };
 
 
@@ -3971,6 +4117,8 @@ function executeDelete(idx) {
     const targetLat = target.lat;
     const targetLon = target.lon;
 
+    updateRawGpxContent(targetName, { lat: targetLat, lng: targetLon }, null, null);
+
     currentStackItem.waypoints = currentStackItem.waypoints.filter(w => {
         const isSame = (w.name === targetName && w.lat === targetLat && w.lon === targetLon);
         return !isSame; 
@@ -3982,6 +4130,11 @@ function executeDelete(idx) {
         });
     }
 
+    if (typeof currentPopup !== 'undefined' && currentPopup) map.closePopup();
+    map.eachLayer(layer => {
+        if (layer instanceof L.CircleMarker && layer.options.radius === 7) map.removeLayer(layer);
+    });
+
     if (typeof renderWaypointsAndPeaks === 'function') {
         renderWaypointsAndPeaks(allTracks[window.currentActiveIndex || 0]);
     }
@@ -3989,8 +4142,6 @@ function executeDelete(idx) {
     if (typeof loadRoute === 'function') {
         loadRoute(window.currentActiveIndex || 0); 
     }
-    
-    if (typeof currentPopup !== 'undefined' && currentPopup) map.closePopup();
 }
 
 
@@ -4046,7 +4197,7 @@ window.exportGpx = function(index) {
     const targetDate = hasPoints ? toTwDate(currentRoute.points[0].time) : null;
     const trackName = escapeXml(currentRoute.name || "Exported_Route");
 
-    // --- 開始構建 GPX ---
+    
     let gpx = `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.0" creator="YCHiking" 
   xmlns="http://www.topografix.com/GPX/1/0"
@@ -4395,7 +4546,6 @@ searchInput.onkeydown = function(e) {
 };
 
 function mergeSelectedGpx() {
-    console.log("%c >>> 模擬真實匯入模式 (解決直線與選單) <<< ", "background: #000; color: #00ff00; font-size: 18px;");
 
     try {
         const selectedIndices = [];
@@ -4410,7 +4560,7 @@ function mergeSelectedGpx() {
         let gpxWaypointsXml = "";
         let gpxTracksXml = `\n  <trk>\n    <name>${mergedName}</name>`; 
 
-        // 1. 物理構建 (模仿閂山鈴鳴結構)
+        
         selectedIndices.sort((a, b) => a - b).forEach((idx) => {
             const gpx = multiGpxStack[idx];
             if (!gpx || !gpx.points) return;
@@ -4432,35 +4582,34 @@ function mergeSelectedGpx() {
         const gpxFullXml = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">${gpxWaypointsXml}${gpxTracksXml}</gpx>`;
         const blob = new Blob([gpxFullXml], { type: 'application/gpx+xml' });
 
-        // 2. 備份下載
+        
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = `${mergedName}.gpx`;
         a.click();
 
-        // 3. 【終極大招】將 Blob 轉為 File，直接餵給系統的上傳入口
+        
         const dummyFile = new File([blob], `${mergedName}.gpx`, { type: "application/gpx+xml" });
 
-        // 嘗試找出你網頁的上傳 input (通常 ID 是 gpxInput 或 gpxFile)
+        
         const fileInput = document.getElementById('gpxInput') || 
                           document.getElementById('gpxFile') || 
                           document.querySelector('input[type="file"]');
 
         if (fileInput) {
-            console.log("發現上傳點，執行模擬匯入...");
-            // 使用 DataTransfer 物件模擬使用者選取檔案
+            
             const dataTransfer = new DataTransfer();
             dataTransfer.items.add(dummyFile);
             fileInput.files = dataTransfer.files;
 
-            // 觸發 Change 事件，讓 app1042.js 接手後續工作
+            
             fileInput.dispatchEvent(new Event('change', { bubbles: true }));
             
-            // 關閉合併視窗
+            
             document.getElementById('gpxManageModal').style.display = 'none';
             alert("合併完成！已模擬重新匯入，這將消除直線並刷新子路線選單。");
         } else {
-            // 萬一抓不到 input，則提示使用者手動上傳剛下載的檔案
+            
             alert("合併已完成並下載，請直接手動「匯入」該檔案，即可獲得完美的分段效果！");
         }
 
@@ -4478,12 +4627,12 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-// 關鍵函式：讓選單同步
+
 function refreshTopMenu() {
     const routeSelect = document.getElementById("routeSelect");
     if (!routeSelect) return;
     
-    routeSelect.innerHTML = ""; // 清空
+    routeSelect.innerHTML = ""; 
     multiGpxStack.forEach((gpx, i) => {
         const opt = document.createElement("option");
         opt.value = i;
@@ -4491,7 +4640,7 @@ function refreshTopMenu() {
         routeSelect.appendChild(opt);
     });
     
-    // 確保容器顯示
+    
     const container = document.getElementById("routeSelectContainer");
     if (container) container.style.display = "block";
 }
@@ -4510,7 +4659,255 @@ function updateRouteSelectDropdown() {
         routeSelect.appendChild(opt);
     });
     
-    // 如果大於 1 個，確保選單容器可見
+    
     const container = document.getElementById("routeSelectContainer");
     if (container) container.style.display = "block";
+}
+
+/**
+ * 需求同步連動結合路線
+ */
+function syncCombinedWaypoints(oldName, oldLatLng, oldTime, updateFn) {
+    if (window.multiGpxStack) {
+        window.multiGpxStack.forEach(item => {
+            if (item.waypoints) {
+                item.waypoints.forEach(wpt => {
+                    if (wpt.name === oldName && 
+                        Math.abs(wpt.lat - oldLatLng.lat) < 0.0001 && 
+                        Math.abs(wpt.lon - oldLatLng.lng) < 0.0001) {
+                        updateFn(wpt);
+                    }
+                });
+            }
+        });
+    }
+}
+
+/**
+ * 更新原始 XML 內容，徹底解決點擊 GPX Bar 名字會還原的問題
+ */
+function updateRawGpxContent(name, oldLatLng, newLat, newLon) {
+    const stackIdx = (window.currentMultiIndex !== undefined) ? window.currentMultiIndex : 0;
+    const item = multiGpxStack[stackIdx];
+    if (!item || !item.content) return;
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(item.content, "application/xml");
+    const wpts = xmlDoc.getElementsByTagName("wpt");
+
+    
+    for (let i = wpts.length - 1; i >= 0; i--) {
+        const wName = wpts[i].getElementsByTagName("name")[0]?.textContent;
+        const wLat = parseFloat(wpts[i].getAttribute("lat"));
+        const wLon = parseFloat(wpts[i].getAttribute("lon"));
+
+        if (wName === name && 
+            Math.abs(wLat - oldLatLng.lat) < 0.0001 && 
+            Math.abs(wLon - oldLatLng.lng) < 0.0001) {
+            
+            if (newLat === null) {
+                
+                wpts[i].parentNode.removeChild(wpts[i]);
+            } else {
+                
+                wpts[i].setAttribute("lat", newLat.toFixed(6));
+                wpts[i].setAttribute("lon", newLon.toFixed(6));
+            }
+            
+            break; 
+        }
+    }
+    item.content = new XMLSerializer().serializeToString(xmlDoc);
+}
+
+window.focusWaypointWithLog = function(originalIdx, name) {
+    const stackIdx = (window.currentMultiIndex !== undefined) ? window.currentMultiIndex : 0;
+    const wpt = multiGpxStack[stackIdx].waypoints[originalIdx];
+
+    if (wpt) {
+        window.focusWaypoint(wpt.lat, wpt.lon, wpt.name, 0, wpt.ele);
+    } else {
+        console.error(`[Error] 在 multiGpxStack 中找不到索引 ${originalIdx} 的資料！`);
+    }
+};
+
+
+window.handleWptEditByIndex = function(originalIdx) {
+    const stackIdx = (window.currentMultiIndex !== undefined) ? window.currentMultiIndex : 0;
+    const wpt = multiGpxStack[stackIdx].waypoints[originalIdx];
+    if (wpt) {
+        handleWptEdit(originalIdx, wpt.lat, wpt.lon, wpt.ele, wpt.name, wpt.localTime);
+    }
+};
+
+window.deleteSelectedWaypoints = function() {
+    const checked = document.querySelectorAll('.wpt-checkbox:checked');
+    if (checked.length === 0) {
+        alert("請先勾選要刪除的航點");
+        return;
+    }
+
+    const modal = document.getElementById('deleteConfirmModal');
+    if (!modal) return;
+
+    
+    const pTag = modal.querySelector('p');
+    if (pTag) pTag.innerHTML = `此動作無法復原。<br>您確定要刪除這 ${checked.length} 個選取的航點？`;
+
+    const confirmBtn = document.getElementById('modalDeleteConfirm');
+    const cancelBtn = document.getElementById('modalDeleteCancel');
+
+    modal.style.display = 'flex';
+
+    
+    confirmBtn.onclick = function() {
+        
+        const indices = Array.from(checked)
+            .map(cb => parseInt(cb.getAttribute('data-idx')))
+            .sort((a, b) => b - a);
+
+        
+        indices.forEach(idx => {
+            executeDelete(idx);
+        });
+
+        
+        const selectAll = document.getElementById('selectAllWpts');
+        if (selectAll) selectAll.checked = false;
+        if (typeof updateSelectedCount === 'function') updateSelectedCount();
+
+        modal.style.display = 'none';
+    };
+
+    cancelBtn.onclick = function() {
+        modal.style.display = 'none';
+    };
+};
+
+window.updateSelectedCount = function() {
+    
+    const container = document.getElementById('wptTableBody');
+    const checkedCount = container ? container.querySelectorAll('.wpt-checkbox:checked').length : 0;
+    
+    const countLabel = document.getElementById('selectedCount');
+    if (countLabel) {
+        countLabel.textContent = `已選取 ${checkedCount} 項`;
+        countLabel.style.color = checkedCount > 0 ? "#1a73e8" : "#666";
+    }
+};
+
+
+window.toggleSelectAll = function(source) {
+    
+    const container = document.getElementById('wptTableBody');
+    if (!container) return;
+    
+    const checkboxes = container.querySelectorAll('.wpt-checkbox');
+    checkboxes.forEach(cb => {
+        cb.checked = source.checked;
+    });
+    updateSelectedCount();
+};
+
+window.initWptSortable = function() {
+    const el = document.getElementById('wptTableBody');
+    if (!el) {
+        console.error("找不到 wptTableBody，無法初始化拖移");
+        return;
+    }
+
+    
+    if (window.wptSortableInstance) {
+        window.wptSortableInstance.destroy();
+    }
+
+    window.wptSortableInstance = Sortable.create(el, {
+        handle: '.drag-handle', 
+        animation: 150,
+        forceFallback: true,   
+        fallbackClass: "sortable-fallback",
+        ghostClass: 'sortable-ghost',
+        onStart: function() {
+            console.log("開始拖移...");
+        },
+        onEnd: function() {
+            const stackIdx = (typeof window.currentMultiIndex !== 'undefined') ? window.currentMultiIndex : 0;
+            const item = multiGpxStack[stackIdx];
+            
+            
+            const newOrderIndices = Array.from(el.children).map(row => parseInt(row.getAttribute('data-idx')));
+
+            
+            const reorderedWpts = newOrderIndices.map(idx => item.waypoints[idx]);
+            item.waypoints = reorderedWpts;
+
+            if (typeof allTracks !== 'undefined') {
+                allTracks.forEach(track => { track.waypoints = item.waypoints; });
+            }
+
+            
+            rebuildXmlFromWaypoints(item);
+
+            
+            renderWaypointsAndPeaks(allTracks[window.currentActiveIndex || 0]);
+            console.log("排序儲存完畢");
+        }
+    });
+};
+
+function rebuildXmlFromWaypoints(item) {
+    if (!item || !item.content) {
+        console.warn("rebuildXmlFromWaypoints: 項目或 XML 內容不存在");
+        return;
+    }
+
+    try {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(item.content, "application/xml");
+        const root = xmlDoc.documentElement;
+        
+        
+        const oldWpts = xmlDoc.getElementsByTagName("wpt");
+        
+        while (oldWpts.length > 0) {
+            oldWpts[0].parentNode.removeChild(oldWpts[0]);
+        }
+
+        
+        item.waypoints.forEach(wpt => {
+            const newWpt = xmlDoc.createElement("wpt");
+            newWpt.setAttribute("lat", wpt.lat.toFixed(6));
+            newWpt.setAttribute("lon", wpt.lon.toFixed(6));
+            
+            
+            const nameNode = xmlDoc.createElement("name");
+            nameNode.textContent = wpt.name || "未命名航點";
+            newWpt.appendChild(nameNode);
+            
+            
+            if (wpt.ele !== undefined && wpt.ele !== null) {
+                const eleNode = xmlDoc.createElement("ele");
+                eleNode.textContent = wpt.ele;
+                newWpt.appendChild(eleNode);
+            }
+            
+            
+            if (wpt.time) {
+                const timeNode = xmlDoc.createElement("time");
+                timeNode.textContent = wpt.time;
+                newWpt.appendChild(timeNode);
+            }
+
+            
+            root.appendChild(newWpt);
+        });
+
+        
+        const serializer = new XMLSerializer();
+        item.content = serializer.serializeToString(xmlDoc);
+        
+        console.log("✅ XML 結構重構完成");
+    } catch (error) {
+        console.error("❌ rebuildXmlFromWaypoints 發生錯誤:", error);
+    }
 }
