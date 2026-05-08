@@ -2533,7 +2533,7 @@ window.renderWaypointsAndPeaks = function(currentRoute) {
     const icon = (typeof showWptNameAlways !== 'undefined' && showWptNameAlways) ? "visibility_off" : "visibility";
     
     shortcutsHtml += `<button type="button" class="shortcut-btn" onclick="toggleWptNames()" style="display:inline-flex; align-items:center;"><span class="material-icons" style="font-size:18px; margin-right:4px;">${icon}</span><span>航點名稱</span></button>`;
-    shortcutsHtml += `<button type="button" class="shortcut-btn" onclick="document.getElementById('anchorWpt').scrollIntoView({behavior: 'smooth'})">📍 航點列表</button>`;
+    shortcutsHtml += `<button type="button" class="shortcut-btn" onclick="document.getElementById('anchorWpt').scrollIntoView({behavior: 'smooth'})">航點列表</button>`;
     listHtml += `<h4 id="anchorWpt" style="margin: 20px 0 10px 0;">📍 航點列表 (${uniqueWpts.length})</h4>`;
 
     listHtml += `
@@ -2596,19 +2596,19 @@ listHtml += `
         </div>
     </div>`;
     
-    shortcutsHtml += `<button type="button" class="shortcut-btn" onclick="document.getElementById('anchorPeak').scrollIntoView({behavior: 'smooth'})">⛰️ 沿途山岳</button>`;
+    shortcutsHtml += `<button type="button" class="shortcut-btn" onclick="document.getElementById('anchorPeak').scrollIntoView({behavior: 'smooth'})">沿途山岳</button>`;
 
 		const u = historyManager.getBtnState('undo');
 		const r = historyManager.getBtnState('redo');
 		
 		shortcutsHtml += `
-    <span id="undoRedoGroup" style="margin-left: 0px; border-left: 1px solid #eee; padding-left: 10px; display: inline-flex; align-items: center; gap: 3px; vertical-align: middle;">
+    <span id="undoRedoGroup" style="margin-left: 0px; border-left: 1px solid #eee; padding-left: 10px; display: inline-flex; align-items: center; gap: 6px; vertical-align: middle;">
         <button id="undoBtn" type="button" class="shortcut-btn" onclick="historyManager.undo()" title="復原 (Ctrl+Z)" ${u.disabled}
-            style="width: 30px; height: 26px; border-radius: 13px; display: flex; align-items: center; justify-content: center; padding: 0; background: #f8f9fa; border: 1px solid #eee; color: ${u.color}; opacity: ${u.opacity}; cursor: ${u.cursor}; transition: all 0.2s;">
+            style="width: 35px; height: 26px; border-radius: 13px; display: flex; align-items: center; justify-content: center; padding: 0; background: #f8f9fa; border: 1px solid #eee; color: ${u.color}; opacity: ${u.opacity}; cursor: ${u.cursor}; transition: all 0.2s;">
             <span class="material-icons" style="font-size: 18px;">undo</span>
         </button>
         <button id="redoBtn" type="button" class="shortcut-btn" onclick="historyManager.redo()" title="重做 (Ctrl+Y)" ${r.disabled}
-            style="width: 30px; height: 26px; border-radius: 13px; display: flex; align-items: center; justify-content: center; padding: 0; background: #f8f9fa; border: 1px solid #eee; color: ${r.color}; opacity: ${r.opacity}; cursor: ${r.cursor}; transition: all 0.2s;">
+            style="width: 35px; height: 26px; border-radius: 13px; display: flex; align-items: center; justify-content: center; padding: 0; background: #f8f9fa; border: 1px solid #eee; color: ${r.color}; opacity: ${r.opacity}; cursor: ${r.cursor}; transition: all 0.2s;">
             <span class="material-icons" style="font-size: 18px;">redo</span>
         </button>
     </span>
