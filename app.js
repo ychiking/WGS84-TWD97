@@ -2602,13 +2602,13 @@ listHtml += `
 		const r = historyManager.getBtnState('redo');
 		
 		shortcutsHtml += `
-    <span id="undoRedoGroup" style="margin-left: 0px; border-left: 1px solid #eee; padding-left: 10px; display: inline-flex; align-items: center; gap: 6px; vertical-align: middle;">
+    <span id="undoRedoGroup" style="margin-left: 0px; border-left: 1px solid #eee; padding-left: 4px; display: inline-flex; align-items: center; gap: 3px; vertical-align: middle;">
         <button id="undoBtn" type="button" class="shortcut-btn" onclick="historyManager.undo()" title="復原 (Ctrl+Z)" ${u.disabled}
-            style="width: 40px; height: 26px; border-radius: 13px; display: flex; align-items: center; justify-content: center; padding: 0; background: #f8f9fa; border: 1px solid #eee; color: ${u.color}; opacity: ${u.opacity}; cursor: ${u.cursor}; transition: all 0.2s;">
+            style="width: 35px; height: 26px; border-radius: 13px; display: flex; align-items: center; justify-content: center; padding: 0; background: #f8f9fa; border: 1px solid #eee; color: ${u.color}; opacity: ${u.opacity}; cursor: ${u.cursor}; transition: all 0.2s;">
             <span class="material-icons" style="font-size: 18px;">undo</span>
         </button>
         <button id="redoBtn" type="button" class="shortcut-btn" onclick="historyManager.redo()" title="重做 (Ctrl+Y)" ${r.disabled}
-            style="width: 40px; height: 26px; border-radius: 13px; display: flex; align-items: center; justify-content: center; padding: 0; background: #f8f9fa; border: 1px solid #eee; color: ${r.color}; opacity: ${r.opacity}; cursor: ${r.cursor}; transition: all 0.2s;">
+            style="width: 35px; height: 26px; border-radius: 13px; display: flex; align-items: center; justify-content: center; padding: 0; background: #f8f9fa; border: 1px solid #eee; color: ${r.color}; opacity: ${r.opacity}; cursor: ${r.cursor}; transition: all 0.2s;">
             <span class="material-icons" style="font-size: 18px;">redo</span>
         </button>
     </span>
