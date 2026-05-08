@@ -2532,7 +2532,7 @@ window.renderWaypointsAndPeaks = function(currentRoute) {
     if (uniqueWpts.length > 0) {
     const icon = (typeof showWptNameAlways !== 'undefined' && showWptNameAlways) ? "visibility_off" : "visibility";
     
-    shortcutsHtml += `<button type="button" class="shortcut-btn" onclick="toggleWptNames()" style="display:inline-flex; align-items:center;"><span class="material-icons" style="font-size:16px; margin-right:2px;">${icon}</span><span>航點名稱</span></button>`;
+    shortcutsHtml += `<button type="button" class="shortcut-btn" onclick="toggleWptNames()" style="display:inline-flex; align-items:center;"><span class="material-icons" style="font-size:18px; margin-right:4px;">${icon}</span><span>航點名稱</span></button>`;
     shortcutsHtml += `<button type="button" class="shortcut-btn" onclick="document.getElementById('anchorWpt').scrollIntoView({behavior: 'smooth'})">📍 航點列表</button>`;
     listHtml += `<h4 id="anchorWpt" style="margin: 20px 0 10px 0;">📍 航點列表 (${uniqueWpts.length})</h4>`;
 
@@ -2587,10 +2587,10 @@ listHtml += `
 			}
 
     
-    listHtml += `<h4 id="anchorPeak" style="margin: 28px 0 10px 0; font-size: 14px; color: #2c3e50; border-left: 5px solid #d35400; padding-left: 10px;">⛰️ 沿途山岳(200公尺內)</h4>`;
+    listHtml += `<h4 id="anchorPeak" style="margin: 30px 0 10px 0; font-size: 16px; color: #2c3e50; border-left: 5px solid #d35400; padding-left: 10px;">⛰️ 沿途山岳(200公尺內)</h4>`;
     listHtml += `
     <div id="aiPeaksSection">
-        <div style="padding:15px; text-align:center; background:#f8f9fa; border:1px dashed #ccc; border-radius:8px; margin:10px 0;">
+        <div style="padding:15px; text-align:center; background:#f8f9fa; border:1px dashed #ccc; border-radius:8px; margin:10px;">
             <p style="margin-bottom:8px; color:#666; font-size:13px;">📍 已準備好偵測此路線周圍山岳</p>
             <button onclick="detectPeaksAlongRoute(true)" style="padding: 10px 25px; background: #1a73e8; color: white; border: none; border-radius: 50px; cursor: pointer; font-weight: bold; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); display: inline-flex; align-items: center; justify-content: center;">🔍 偵測此路線山岳</button>
         </div>
@@ -2602,13 +2602,13 @@ listHtml += `
 		const r = historyManager.getBtnState('redo');
 		
 		shortcutsHtml += `
-    <span id="undoRedoGroup" style="margin-left: 0px; border-left: 1px solid #eee; padding-left: 4px; display: inline-flex; align-items: center; gap: 3px; vertical-align: middle;">
+    <span id="undoRedoGroup" style="margin-left: 0px; border-left: 1px solid #eee; padding-left: 10px; display: inline-flex; align-items: center; gap: 3px; vertical-align: middle;">
         <button id="undoBtn" type="button" class="shortcut-btn" onclick="historyManager.undo()" title="復原 (Ctrl+Z)" ${u.disabled}
-            style="width: 35px; height: 26px; border-radius: 13px; display: flex; align-items: center; justify-content: center; padding: 0; background: #f8f9fa; border: 1px solid #eee; color: ${u.color}; opacity: ${u.opacity}; cursor: ${u.cursor}; transition: all 0.2s;">
+            style="width: 30px; height: 26px; border-radius: 13px; display: flex; align-items: center; justify-content: center; padding: 0; background: #f8f9fa; border: 1px solid #eee; color: ${u.color}; opacity: ${u.opacity}; cursor: ${u.cursor}; transition: all 0.2s;">
             <span class="material-icons" style="font-size: 18px;">undo</span>
         </button>
         <button id="redoBtn" type="button" class="shortcut-btn" onclick="historyManager.redo()" title="重做 (Ctrl+Y)" ${r.disabled}
-            style="width: 35px; height: 26px; border-radius: 13px; display: flex; align-items: center; justify-content: center; padding: 0; background: #f8f9fa; border: 1px solid #eee; color: ${r.color}; opacity: ${r.opacity}; cursor: ${r.cursor}; transition: all 0.2s;">
+            style="width: 30px; height: 26px; border-radius: 13px; display: flex; align-items: center; justify-content: center; padding: 0; background: #f8f9fa; border: 1px solid #eee; color: ${r.color}; opacity: ${r.opacity}; cursor: ${r.cursor}; transition: all 0.2s;">
             <span class="material-icons" style="font-size: 18px;">redo</span>
         </button>
     </span>
