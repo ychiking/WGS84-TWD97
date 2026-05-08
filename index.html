@@ -742,7 +742,7 @@
 
 <body>
   <div id="header">
-    <strong style="font-size: 12px; color: #333;">YCHiking-GPX 路線檢視工具 v2605082</strong>
+    <strong style="font-size: 12px; color: #333;">YCHiking-GPX 路線檢視工具 v2605083</strong>
     <div class="upload-row">
       <input type="file" id="gpxInput" accept=".gpx" style="display: none;" />
       <input type="file" id="multiGpxInput" accept=".gpx" multiple style="display: none;" />
@@ -844,7 +844,7 @@
     </div>
   </div>
 	<button id="toggleChartBtn" onclick="toggleElevationChart()" style="display: none;">展開/收合高度表</button>
-			<div id="wptEditModal" class="wpt-modal-overlay">
+	<div id="wptEditModal" class="wpt-modal-overlay">
   <div class="wpt-modal-content" onclick="event.stopPropagation()">
     
     <span style="position: absolute; top: 10px; right: 15px; font-size: 24px; cursor: pointer; color: #999;" 
@@ -862,7 +862,9 @@
       <input type="number" id="modalWptEle" style="width: 100%; padding: 8px; border: 1px solid #ccc; font-size: 16px; border-radius: 4px; box-sizing: border-box;">
     </div>
     
-    <button id="modalWptConfirm" style="width: 100%; background: #1a73e8; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer; font-weight: bold;">確定儲存</button>
+    <button id="modalWptConfirm" style="width: 100%; background: #1a73e8; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer; font-weight: bold; margin-bottom: 8px;">確定儲存</button>
+
+    <button id="modalWptDelete" style="width: 100%; background: #fff; color: #dc3545; border: 1px solid #dc3545; padding: 10px; border-radius: 4px; cursor: pointer; font-weight: bold; display: none;">刪除航點</button>
   </div>
 </div>
 		
@@ -876,7 +878,7 @@
         <div style="margin-bottom: 15px;">
               <input type="text" id="modalRouteName" style="width: 100%; font-size: 16px; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; text-align: center;">
         </div>
-
+  			<button id="modalWptDelete" style="width: 100%; background: white; color: #dc3545; border: 1px solid #dc3545; padding: 10px; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; display: none;">刪除航點</button>
         <button id="modalRouteConfirm" style="width: 100%; background: #1a73e8; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 16px;">確認更新</button>
     </div>
 </div>
