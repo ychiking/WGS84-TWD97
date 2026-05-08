@@ -3,11 +3,13 @@ const map = L.map("map", { tap: true }).setView([25.03, 121.56], 12);
 const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap" }).addTo(map);
 const otm = L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", { maxZoom: 18, maxNativeZoom: 17, attribution: 'OpenTopoMap' });
 
+// 經建三版
 var map3rd = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/GoogleMapsCompatible/{z}/{y}/{x}', {
     attribution: '© <a href="https://maps.nlsc.gov.tw/">內政部國土測繪中心</a>',
     maxZoom: 19,
     minZoom: 7
 });
+
 // Happyman（當底圖）
 const happyman = L.tileLayer(
   "https://tile.happyman.idv.tw/map/happyman/{z}/{x}/{y}.png",
@@ -86,7 +88,6 @@ const overlayMaps = {
 
 L.control.layers(baseMaps, overlayMaps).addTo(map);
 
-//happyman.addTo(map);
 rudy.addTo(map);
 map.on('overlayadd', updateGrids);
 
@@ -118,22 +119,16 @@ map.on('click', (e) => {
             if (d < minD) { minD = d; closest = p; }
         });
     }
-
     
     if (closest && minD * 111000 < 5) {
-    
     if (clickTimeout) clearTimeout(clickTimeout); 
 
-    
-    
     const idx = trackPoints.indexOf(closest);
-
     
     if (idx !== -1 && typeof showCustomPopup === 'function') {
         
         showCustomPopup(idx, "位置資訊", null, closest.lat, closest.lon);
-        
-        
+      
         if (hoverMarker) {
             hoverMarker.setLatLng([closest.lat, closest.lon]).addTo(map).bringToFront();
         }
@@ -198,7 +193,6 @@ function processGpxXml(text) {
     return tempTracks;
 }
 
-
 function updateGrids() {
     const zoom = map.getZoom();
     const bounds = map.getBounds();
@@ -224,7 +218,6 @@ function updateGrids() {
             interactive: false
         });
     };
-
 
     const drawTWDGrid = (layer, def, color) => {
         if (!map.hasLayer(layer)) return;
@@ -300,7 +293,6 @@ if (map.hasLayer(gridLayers.WGS84)) {
 
 map.on('moveend', updateGrids);
 
-
 const fullScreenBtn = L.control({ position: 'topleft' });
 
 fullScreenBtn.onAdd = function() {
@@ -359,7 +351,6 @@ fullScreenBtn.onAdd = function() {
     };
     return btn;
 };
-
 
 function showFreeClickPopup(latlng, searchTitle = null, searchAddr = null) {
     const lat = latlng.lat;
@@ -456,6 +447,7 @@ function showFreeClickPopup(latlng, searchTitle = null, searchAddr = null) {
             .openOn(map);
     }
 }
+
 window.setFreeAB = function(type, lat, lon) {
     
     if (gpsMarker) {
@@ -470,7 +462,6 @@ window.setFreeAB = function(type, lat, lon) {
         }
     }
 
-    
     const p = { lat, lon, ele: 0, distance: 0, timeLocal: "無時間資訊", timeUTC: 0, idx: -1 };
     
     if (type === 'A') {
@@ -501,8 +492,6 @@ window.setFreeAB = function(type, lat, lon) {
     updateABUI();
 };
 
-
-
 routeSelect.addEventListener("change", (e) => {
     const selectedIndex = parseInt(e.target.value);
     loadRoute(selectedIndex);
@@ -524,7 +513,6 @@ const wptIcon = new L.Icon({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
   iconSize: [20, 32], iconAnchor: [10, 32], popupAnchor: [1, -28], shadowSize: [32, 32]
 });
-
 
 window.clearABSettings = function() {
   pointA = null; pointB = null;
@@ -605,7 +593,7 @@ function clearEverything() {
     if (summary) summary.innerHTML = "";
     const wptList = document.getElementById("wptList");
     if (wptList) wptList.innerHTML = "";
-}
+		}
 
 function parseGPX(text, fileName, shouldFit = true) { 
     const xml = new DOMParser().parseFromString(text, "application/xml");
@@ -702,7 +690,7 @@ function parseGPX(text, fileName, shouldFit = true) {
         window.multiGpxStack = allTracks;
         loadRoute(0, shouldFit);
     }
-}
+		}
 
 function extractPoints(pts) {
   let res = [], total = 0;
@@ -766,7 +754,7 @@ function calculateElevationGainFiltered(points = trackPoints) {
     if (Math.abs(diff) >= threshold) { if (diff > 0) gain += diff; else loss += Math.abs(diff); lastEle = smoothed[i]; }
   }
   return { gain, loss };
-}
+	}
 
 function getBearingInfo(lat1, lon1, lat2, lon2) {
     const toRad = deg => deg * Math.PI / 180;
@@ -778,7 +766,7 @@ function getBearingInfo(lat1, lon1, lat2, lon2) {
     const directions = ["北", "東北", "東", "東南", "南", "西南", "西", "西北"];
     const index = Math.round(bearing / 45) % 8;
     return { deg: bearing.toFixed(0), name: directions[index] };
-}
+		}
 
 
 let fsPopupTimer = null;
@@ -951,6 +939,16 @@ function initProgressBar() {
 
 function loadRoute(index, customColor = null) {
     window.currentActiveIndex = index;
+    
+    map.eachLayer(layer => {
+        if (layer instanceof L.CircleMarker && layer.options.radius === 7) {
+            map.removeLayer(layer);
+        }
+    });
+    if (window.activeFocusCircle) window.activeFocusCircle = null;
+    
+
+    map.closePopup();
 
     map.closePopup();
     if (typeof window.clearABSettings === 'function') window.clearABSettings();
@@ -961,32 +959,21 @@ function loadRoute(index, customColor = null) {
     if (!sel) return;
 
 		const fileName = window.currentFileNameForDisplay || "default";
-const fileKey = fileName + "_" + index;
+		const fileKey = fileName + "_" + index;
 
-if (window.customNameCache && window.customNameCache[fileKey]) {
-    const cachedName = window.customNameCache[fileKey];
-    
-    
-    sel.name = cachedName; 
-    if (allTracks && allTracks[index]) allTracks[index].name = cachedName;
-
-    
-    
-    
-    if (window.multiGpxStack && window.multiGpxStack[index]) {
-        window.multiGpxStack[index].name = cachedName;
-    }
-    
-    console.log("🛠️ 名稱校正為：" + cachedName);
-
-    
-    const routeSelect = document.getElementById("routeSelect");
-    if (routeSelect && routeSelect.options[index]) {
-        routeSelect.options[index].text = cachedName;
-        console.log("✅ 下拉選單文字已同步為：" + cachedName);
-    }
-}
-    
+		if (window.customNameCache && window.customNameCache[fileKey]) {
+		    const cachedName = window.customNameCache[fileKey];
+		
+		    sel.name = cachedName; 
+		    if (allTracks && allTracks[index]) allTracks[index].name = cachedName;
+		    if (window.multiGpxStack && window.multiGpxStack[index]) {
+		        window.multiGpxStack[index].name = cachedName;
+		    }
+		    const routeSelect = document.getElementById("routeSelect");
+		    if (routeSelect && routeSelect.options[index]) {
+		        routeSelect.options[index].text = cachedName;
+		    }
+		}
     
     const wptToggleContainer = document.getElementById("wptToggleContainer");
     if (wptToggleContainer) wptToggleContainer.style.display = "block";
@@ -1228,59 +1215,99 @@ if (window.customNameCache && window.customNameCache[fileKey]) {
                                 : `確定將「${w.name}」移至此處？\n(此處不在路徑上，將遺失高度與時間資訊)`);
 
                 if (confirm(confirmMsg)) {
-                    window.isDraggingWpt = true; 
+                    
+                    const oldWptSnapshot = JSON.parse(JSON.stringify(w));
+                    const startPos = { lat: previousLatLng.lat, lng: previousLatLng.lng };
+                    const endPos = { lat: newLat, lng: newLon };
 
-                    const updateLogic = (targetWpt) => {
-                        targetWpt.lat = newLat;
-                        targetWpt.lon = newLon;
-                        if (isOnPath) {
-                            const tp = trackPoints[nearestIdx];
-                            targetWpt.ele = tp.ele;
-                            targetWpt.time = tp.time;
-                            targetWpt.localTime = tp.timeLocal;
-                            targetWpt.distance = tp.distance;
-                        } else {
-                            targetWpt.ele = 0;
-                            targetWpt.time = new Date().toISOString();
-                            targetWpt.localTime = formatDate(new Date(new Date().getTime() + 8 * 3600000));
-                            targetWpt.distance = undefined;
-                        }
-                    };
+                    const currentFileIdx = window.currentMultiIndex; 
 
-                    syncCombinedWaypoints(w.name, previousLatLng, w.time, updateLogic);
-                    updateLogic(w);
-                    updateRawGpxContent(w.name, previousLatLng, newLat, newLon);
-
-                    previousLatLng = newLatLng;
-                    wasOnPath = isOnPath;
-
-                    map.closePopup(); 
-                    loadRoute(window.currentActiveIndex || 0); 
-
-                    setTimeout(() => { 
-                        map.closePopup(); 
-                        window.isDraggingWpt = false; 
-                    }, 100); 
-
-                    if (typeof renderWaypointsAndPeaks === 'function') {
-                        renderWaypointsAndPeaks(sel); 
-                    }
-
-                    map.eachLayer(layer => {
-                        if (layer instanceof L.CircleMarker && layer.options.radius === 7) map.removeLayer(layer);
-                    });
-                    window.activeFocusCircle = L.circleMarker([newLat, newLon], {
-                        radius: 7, color: '#ffffff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1, interactive: false 
-                    }).addTo(map);
-
-                    if (isOnPath && document.getElementById('gpxProgressBar')) {
-                        const progressBar = document.getElementById('gpxProgressBar');
-                        progressBar.value = nearestIdx;
-                        progressBar.dispatchEvent(new Event('input', { bubbles: true }));
-                    }
+						historyManager.execute({
+						    
+						    fileIdx: currentFileIdx, 
+						
+						    do: function() {
+						        
+						        if (window.currentMultiIndex !== this.fileIdx) {
+						            if (typeof switchMultiGpx === 'function') switchMultiGpx(this.fileIdx);
+						        }
+						
+						        window.isDraggingWpt = true; 
+						
+						        const updateLogic = (targetWpt) => {
+						            targetWpt.lat = endPos.lat;
+						            targetWpt.lon = endPos.lng;
+						            if (isOnPath) {
+						                const tp = trackPoints[nearestIdx];
+						                targetWpt.ele = tp.ele;
+						                targetWpt.time = tp.time;
+						                targetWpt.localTime = tp.timeLocal;
+						                targetWpt.distance = tp.distance;
+						            } else {
+						                targetWpt.ele = 0;
+						                targetWpt.time = new Date().toISOString();
+						                targetWpt.localTime = formatDate(new Date(new Date().getTime() + 8 * 3600000));
+						                targetWpt.distance = undefined;
+						            }
+						        };
+						
+						        
+						        syncCombinedWaypoints(w.name, L.latLng(startPos.lat, startPos.lng), w.time, updateLogic);
+						        updateLogic(w);
+						        updateRawGpxContent(w.name, L.latLng(startPos.lat, startPos.lng), endPos.lat, endPos.lng);
+						
+						        
+						        previousLatLng = L.latLng(endPos.lat, endPos.lng);
+						        wasOnPath = isOnPath;
+						
+						        loadRoute(window.currentActiveIndex || 0); 
+						
+						        if (typeof renderWaypointsAndPeaks === 'function') {
+						            renderWaypointsAndPeaks(sel); 
+						        }
+						
+						        
+						        map.eachLayer(layer => {
+						            if (layer instanceof L.CircleMarker && layer.options.radius === 7) map.removeLayer(layer);
+						        });
+						        window.activeFocusCircle = L.circleMarker([endPos.lat, endPos.lng], {
+						            radius: 7, color: '#ffffff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1, interactive: false 
+						        }).addTo(map);
+						
+						        setTimeout(() => { window.isDraggingWpt = false; }, 100);
+						    },
+						
+						    undo: function() {
+						        
+						        if (window.currentMultiIndex !== this.fileIdx) {
+							            if (typeof switchMultiGpx === 'function') {
+						                switchMultiGpx(this.fileIdx);
+						            }
+						        }
+						
+						        
+						        Object.assign(w, oldWptSnapshot);
+						        
+						        
+						        updateRawGpxContent(w.name, L.latLng(endPos.lat, endPos.lng), startPos.lat, startPos.lng);
+						        
+						        
+						        previousLatLng = L.latLng(startPos.lat, startPos.lng);
+						        wasOnPath = (oldWptSnapshot.distance !== undefined);
+						
+						        loadRoute(window.currentActiveIndex || 0);
+						
+						        
+						        map.eachLayer(layer => {
+						            if (layer instanceof L.CircleMarker && layer.options.radius === 7) map.removeLayer(layer);
+						        });
+						        window.activeFocusCircle = L.circleMarker([startPos.lat, startPos.lng], {
+						            radius: 7, color: '#ffffff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1, interactive: false 
+						        }).addTo(map);
+						    }
+						});
                 } else {
                     marker.setLatLng(previousLatLng);
-                    window.isDraggingWpt = false; 
                 }
             });
 
@@ -1317,7 +1344,7 @@ if (window.customNameCache && window.customNameCache[fileKey]) {
     if (typeof renderRouteInfo === 'function') renderRouteInfo();
     if (typeof renderWaypointsAndPeaks === 'function') renderWaypointsAndPeaks(sel); 
     if (typeof initProgressBar === 'function') initProgressBar();
-}
+		}
  
 function toggleWptNames() {
     showWptNameAlways = !showWptNameAlways;
@@ -1325,14 +1352,14 @@ function toggleWptNames() {
     let currentIndex = (window.currentActiveIndex !== undefined) ? window.currentActiveIndex : 0;
 
     loadRoute(currentIndex);
-}
+		}
 
-window.toggleCompass = function() {
-		const compass = document.querySelector(".map-compass");
-    if (compass) { compass.classList.toggle("show"); }
-};
+		window.toggleCompass = function() {
+				const compass = document.querySelector(".map-compass");
+		    if (compass) { compass.classList.toggle("show"); }
+		};
 
-const CombinedControl = L.Control.extend({
+		const CombinedControl = L.Control.extend({
     options: { position: 'topleft' }, 
     onAdd: function (map) {
         const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
@@ -2534,30 +2561,30 @@ listHtml += `
         <tbody id="wptTableBody">`; 
 
 
-uniqueWpts.forEach((w, displayIdx) => {
-    const displayTime = w.localTime || (w.time ? new Date(w.time).toLocaleString() : "無時間資訊");
-    
-    
-    listHtml += `<tr data-idx="${w.originalIdx}">
-        <td class="drag-handle" style="cursor: grab; color: #ccc;"><span class="material-icons">drag_indicator</span></td>
-        
-        <td><input type="checkbox" class="wpt-checkbox" data-idx="${w.originalIdx}" onchange="updateSelectedCount()"></td>
-        
-        <td><span class="wpt-link" onclick="focusWaypointWithLog(${w.originalIdx}, '${w.name}')">${displayIdx + 1}</span></td>
-        
-        <td>${displayTime}</td>
-        
-        <td>${w.name}</td>
-        
-        <td>
-            <span class="material-icons wpt-action-icon" onclick="handleWptEditByIndex(${w.originalIdx})">edit</span>
-            <span class="material-icons wpt-action-icon wpt-delete-icon" onclick="deleteWaypoint(${w.originalIdx})">delete</span>
-        </td>
-    </tr>`;
-});
-
-listHtml += `</tbody></table>`;
-}
+			uniqueWpts.forEach((w, displayIdx) => {
+			    const displayTime = w.localTime || (w.time ? new Date(w.time).toLocaleString() : "無時間資訊");
+			    
+			    
+			    listHtml += `<tr data-idx="${w.originalIdx}">
+			        <td class="drag-handle" style="cursor: grab; color: #ccc;"><span class="material-icons">drag_indicator</span></td>
+			        
+			        <td><input type="checkbox" class="wpt-checkbox" data-idx="${w.originalIdx}" onchange="updateSelectedCount()"></td>
+			        
+			        <td><span class="wpt-link" onclick="focusWaypointWithLog(${w.originalIdx}, '${w.name}')">${displayIdx + 1}</span></td>
+			        
+			        <td>${displayTime}</td>
+			        
+			        <td>${w.name}</td>
+			        
+			        <td>
+			            <span class="material-icons wpt-action-icon" onclick="handleWptEditByIndex(${w.originalIdx})">edit</span>
+			            <span class="material-icons wpt-action-icon wpt-delete-icon" onclick="deleteWaypoint(${w.originalIdx})">delete</span>
+			        </td>
+			    </tr>`;
+			});
+			
+			listHtml += `</tbody></table>`;
+			}
 
     
     listHtml += `<h4 id="anchorPeak" style="margin: 30px 0 10px 0; font-size: 16px; color: #2c3e50; border-left: 5px solid #d35400; padding-left: 10px;">⛰️ 沿途山岳(200公尺內)</h4>`;
@@ -2570,6 +2597,23 @@ listHtml += `</tbody></table>`;
     </div>`;
     
     shortcutsHtml += `<button type="button" class="shortcut-btn" onclick="document.getElementById('anchorPeak').scrollIntoView({behavior: 'smooth'})">⛰️ 沿途山岳</button>`;
+
+		const u = historyManager.getBtnState('undo');
+		const r = historyManager.getBtnState('redo');
+		
+		shortcutsHtml += `
+    <span id="undoRedoGroup" style="margin-left: 10px; border-left: 1px solid #eee; padding-left: 10px; display: inline-flex; align-items: center; gap: 6px; vertical-align: middle;">
+        <button id="undoBtn" type="button" class="shortcut-btn" onclick="historyManager.undo()" title="復原 (Ctrl+Z)" ${u.disabled}
+            style="width: 40px; height: 26px; border-radius: 13px; display: flex; align-items: center; justify-content: center; padding: 0; background: #f8f9fa; border: 1px solid #eee; color: ${u.color}; opacity: ${u.opacity}; cursor: ${u.cursor}; transition: all 0.2s;">
+            <span class="material-icons" style="font-size: 18px;">undo</span>
+        </button>
+        <button id="redoBtn" type="button" class="shortcut-btn" onclick="historyManager.redo()" title="重做 (Ctrl+Y)" ${r.disabled}
+            style="width: 40px; height: 26px; border-radius: 13px; display: flex; align-items: center; justify-content: center; padding: 0; background: #f8f9fa; border: 1px solid #eee; color: ${r.color}; opacity: ${r.opacity}; cursor: ${r.cursor}; transition: all 0.2s;">
+            <span class="material-icons" style="font-size: 18px;">redo</span>
+        </button>
+    </span>
+`;
+
 
     wptListContainer.innerHTML = listHtml;
     wptListContainer.style.display = "block";
@@ -2997,14 +3041,14 @@ async function handleGpxFiles(files) {
     if (!files || files.length === 0) return;
 
     clearEverything(); 
+		historyManager.clear();
+ 
     if (typeof window.resetGPS === 'function') window.resetGPS();
     if (typeof polyline !== 'undefined' && polyline) map.removeLayer(polyline);
 
     allTracks = []; 
     window.customNameCache = {}; 
-    console.log("♻️ 已重置所有路線名稱紀錄");
-    
-    
+ 
     clearAllMultiGPX(); 
     
     document.getElementById("fileNameDisplay").innerHTML = `
@@ -3096,15 +3140,12 @@ async function handleGpxFiles(files) {
 		if (routeSelect) {
 		    
 		    routeSelect.onmousedown = function() {
-		        console.log("🎯 下拉選單即將展開，執行強制同步...");
-		        if (typeof updateRouteSelectDropdown === 'function') {
+				        if (typeof updateRouteSelectDropdown === 'function') {
 		            updateRouteSelectDropdown();
 		        }
 		    };
 		}
-    
-    console.log("✅ 所有檔案解析完成，準備渲染選單。Stack 長度:", multiGpxStack.length);
-    
+  
     if (multiGpxStack.length > 0) {
         document.getElementById('multiGpxBtnBar').style.display = 'flex';
         renderMultiGpxButtons();
@@ -3941,171 +3982,100 @@ window.handleWptEdit = function(existingIdx, lat, lon, ele, oldName, timeStr, or
 
 function processSave(finalName, finalEle) {
     const { existingIdx, lat, lon, timeStr, originalIdx, stackIdx, activeIdx } = currentEditTask;
+    const isEditing = (existingIdx !== null && existingIdx !== -1);
 
+    
     const formatToStandard = (dateInput) => {
         const d = new Date(dateInput);
         if (isNaN(d.getTime())) return dateInput; 
         const pad = (n) => String(n).padStart(2, '0');
         return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     };
-
     const getNowStr = () => formatToStandard(new Date());
 
-    let targetWpt;
-    if (existingIdx !== null && existingIdx !== -1 && multiGpxStack[stackIdx].waypoints[existingIdx]) {
-        multiGpxStack[stackIdx].waypoints[existingIdx].name = finalName;
-        multiGpxStack[stackIdx].waypoints[existingIdx].ele = parseFloat(finalEle);
-        targetWpt = multiGpxStack[stackIdx].waypoints[existingIdx];
-    } else {
-        targetWpt = { 
-            lat, lon, name: finalName, isCustom: true, belongsToRoute: activeIdx,
-            time: new Date().toISOString(), 
-            localTime: getNowStr(), 
-            ele: parseFloat(finalEle) || 0
-        };
-        if (originalIdx !== null && originalIdx !== undefined && timeStr) {
-            const formattedTime = formatToStandard(timeStr);
-            targetWpt.time = formattedTime;
-            targetWpt.localTime = formattedTime;
+    
+    const oldWptSnapshot = isEditing ? JSON.parse(JSON.stringify(multiGpxStack[stackIdx].waypoints[existingIdx])) : null;
+    let addedWptRef = null;
+
+    
+    const runBehavior = (isFromUndoRedo) => {
+        
+        if (allTracks.length === 0) {
+            allTracks.push(multiGpxStack[stackIdx]);
+        } else {
+            allTracks.forEach(track => { track.waypoints = multiGpxStack[stackIdx].waypoints; });
         }
-        multiGpxStack[stackIdx].waypoints.push(targetWpt);
-    }
 
-    if (allTracks.length === 0) {
-        allTracks.push(multiGpxStack[stackIdx]);
-    } else {
-        allTracks.forEach(track => { track.waypoints = multiGpxStack[stackIdx].waypoints; });
-    }
-
-    try {
+        
+        if (typeof rebuildXmlFromWaypoints === 'function') rebuildXmlFromWaypoints(multiGpxStack[stackIdx]);
         if (typeof updateWptTable === 'function') updateWptTable();
         if (typeof renderWaypointsAndPeaks === 'function') renderWaypointsAndPeaks(allTracks[activeIdx]);
-    } catch (e) {}
 
-    if (existingIdx !== null && existingIdx !== -1) {
-        if (typeof loadRoute === 'function') {
-            loadRoute(activeIdx); 
-            
-            if (!window.isDraggingWpt) {
-                setTimeout(() => { showCustomPopup(originalIdx, finalName, "wpt", lat, lon); }, 350);
-            }
-            return; 
-        }
-    } else {
-        const marker = L.marker([lat, lon], { 
-            icon: (typeof wptIcon !== 'undefined' ? wptIcon : new L.Icon.Default()),
-            draggable: true 
-        }).addTo(map);
-
-        let previousLatLng = marker.getLatLng();
         
-        const isAlways = typeof showWptNameAlways !== 'undefined' && showWptNameAlways;
-				marker.bindTooltip(finalName, { 
-				    permanent: isAlways, 
-				    direction: isAlways ? 'right' : 'top', 
-				    offset: isAlways ? [10, 0] : [0, -10],
-				    className: isAlways ? 'wpt-label-label' : ''
-				});
-				if (isAlways) marker.openTooltip();
+        if (typeof loadRoute === 'function') loadRoute(activeIdx);
 
-        marker.on('dragend', function(event) {
-            
-            window.isDraggingWpt = true; 
-            
-            const m = event.target;
-            const newLatLng = m.getLatLng();
-            const newLat = newLatLng.lat;
-            const newLon = newLatLng.lng;
-
-            let nIdx = -1; let mD = Infinity;
-            if (typeof trackPoints !== 'undefined' && trackPoints && trackPoints.length > 0) {
-                trackPoints.forEach((tp, pi) => {
-                    const d = Math.sqrt(Math.pow(newLat - tp.lat, 2) + Math.pow(newLon - tp.lon, 2));
-                    if (d < mD) { mD = d; nIdx = pi; }
+        
+        if (!isFromUndoRedo) {
+            setTimeout(() => {
+                if (window.isDraggingWpt) return;
+                map.eachLayer((layer) => {
+                    if (layer instanceof L.CircleMarker && !(layer instanceof L.Marker)) map.removeLayer(layer);
                 });
-            }
-            const isOnPath = (nIdx !== -1 && (mD * 111000 <= 15));
-
-            let msg = isOnPath 
-                ? `確定將「${finalName}」移至此路徑位置？\n(高度、距離與時間將同步更新)`
-                : `確定將「${finalName}」移至此處？\n(此處不在路徑上，將遺失高度與時間資訊)`;
-            
-            if (confirm(msg)) {
-                targetWpt.lat = newLat;
-                targetWpt.lon = newLon;
-                if (isOnPath) {
-                    const tp = trackPoints[nIdx];
-                    targetWpt.ele = tp.ele; targetWpt.time = tp.time; targetWpt.localTime = tp.timeLocal;
-                } else {
-                    targetWpt.ele = 0; targetWpt.time = new Date().toISOString(); targetWpt.localTime = getNowStr();
-                }
-
-                if (typeof updateRawGpxContent === 'function') {
-                    updateRawGpxContent(finalName, previousLatLng, newLat, newLon);
-                }
-
-                previousLatLng = newLatLng;
-                map.closePopup();
-
-                
-                map.eachLayer(layer => {
-                    if (layer instanceof L.CircleMarker && layer.options.radius === 7) map.removeLayer(layer);
-                });
-
-                if (typeof renderWaypointsAndPeaks === 'function') renderWaypointsAndPeaks(allTracks[activeIdx]);
-                
-                window.activeFocusCircle = L.circleMarker([newLat, newLon], {
+                window.activeFocusCircle = L.circleMarker([lat, lon], {
                     radius: 7, color: '#ffffff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1, interactive: false 
                 }).addTo(map);
 
-                if (isOnPath && document.getElementById('gpxProgressBar')) {
-                    const progressBar = document.getElementById('gpxProgressBar');
-                    progressBar.value = nIdx;
-                    progressBar.dispatchEvent(new Event('input', { bubbles: true }));
+                let targetIdx = parseInt(originalIdx);
+                if ((isNaN(targetIdx) || targetIdx === -1) && typeof trackPoints !== 'undefined') {
+                    let minD = Infinity;
+                    trackPoints.forEach((p, i) => {
+                        const d = Math.abs(p.lat - lat) + Math.abs(p.lon - lon);
+                        if (d < minD) { minD = d; targetIdx = i; }
+                    });
+                    if (minD > 0.0005) targetIdx = 999999;
                 }
-                
-                
-                setTimeout(() => { window.isDraggingWpt = false; }, 800); 
-
-            } else {
-                m.setLatLng(previousLatLng);
-                window.isDraggingWpt = false;
-            }
-        });
-
-        marker.on('click', (e) => {
-            L.DomEvent.stopPropagation(e);
-            showCustomPopup(originalIdx, finalName, "wpt", marker.getLatLng().lat, marker.getLatLng().lng);
-        });
-
-        if (typeof wptMarkers !== 'undefined') wptMarkers.push(marker);
-    }
-    
-    setTimeout(() => { 
-        
-        if (window.isDraggingWpt) return;
-
-        map.eachLayer((layer) => {
-            if (layer instanceof L.CircleMarker && !(layer instanceof L.Marker)) map.removeLayer(layer);
-        });
-
-        window.activeFocusCircle = L.circleMarker([lat, lon], {
-            radius: 7, color: '#ffffff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1, interactive: false 
-        }).addTo(map);
-
-        let targetIdx = parseInt(originalIdx);
-        if ((isNaN(targetIdx) || targetIdx === -1) && typeof trackPoints !== 'undefined') {
-            let minD = Infinity;
-            trackPoints.forEach((p, i) => {
-                const d = Math.abs(p.lat - lat) + Math.abs(p.lon - lon);
-                if (d < minD) { minD = d; targetIdx = i; }
-            });
-            if (minD > 0.0005) targetIdx = 999999;
+                showCustomPopup(targetIdx, finalName, "wpt", lat, lon);
+                if (typeof renderRouteInfo === 'function') renderRouteInfo();
+            }, 350);
         }
+    };
 
-        showCustomPopup(targetIdx, finalName, "wpt", lat, lon); 
-        renderRouteInfo();
-    }, 350); 
+    
+    historyManager.execute({
+        do: () => {
+            if (isEditing) {
+                multiGpxStack[stackIdx].waypoints[existingIdx].name = finalName;
+                multiGpxStack[stackIdx].waypoints[existingIdx].ele = parseFloat(finalEle);
+            } else {
+                addedWptRef = { 
+                    lat, lon, name: finalName, isCustom: true, belongsToRoute: activeIdx,
+                    time: new Date().toISOString(), 
+                    localTime: getNowStr(), 
+                    ele: parseFloat(finalEle) || 0
+                };
+                if (originalIdx !== null && originalIdx !== undefined && timeStr) {
+                    const formattedTime = formatToStandard(timeStr);
+                    addedWptRef.time = formattedTime;
+                    addedWptRef.localTime = formattedTime;
+                }
+                multiGpxStack[stackIdx].waypoints.push(addedWptRef);
+            }
+            runBehavior(false);
+        },
+        undo: () => {
+            if (isEditing) {
+                multiGpxStack[stackIdx].waypoints[existingIdx].name = oldWptSnapshot.name;
+                multiGpxStack[stackIdx].waypoints[existingIdx].ele = oldWptSnapshot.ele;
+            } else {
+                const idx = multiGpxStack[stackIdx].waypoints.indexOf(addedWptRef);
+                if (idx > -1) multiGpxStack[stackIdx].waypoints.splice(idx, 1);
+            }
+            runBehavior(true);
+        }
+    });
+
+    const modal = document.getElementById('wptEditModal');
+    if (modal) modal.style.display = 'none';
 }
 
 window.deleteWaypoint = function(idx) {
@@ -4138,38 +4108,59 @@ function executeDelete(idx) {
 
     if (!currentStackItem || !currentStackItem.waypoints) return;
 
-    const target = currentStackItem.waypoints[idx];
+    
+    const oldWpts = JSON.parse(JSON.stringify(currentStackItem.waypoints));
+    const target = oldWpts[idx];
     if (!target) return;
 
-    const targetName = target.name;
-    const targetLat = target.lat;
-    const targetLon = target.lon;
+    
+    historyManager.execute({
+        do: () => {
+            
+            const targetName = target.name;
+            const targetLat = target.lat;
+            const targetLon = target.lon;
 
-    updateRawGpxContent(targetName, { lat: targetLat, lng: targetLon }, null, null);
+            updateRawGpxContent(targetName, { lat: targetLat, lng: targetLon }, null, null);
 
-    currentStackItem.waypoints = currentStackItem.waypoints.filter(w => {
-        const isSame = (w.name === targetName && w.lat === targetLat && w.lon === targetLon);
-        return !isSame; 
+            currentStackItem.waypoints = currentStackItem.waypoints.filter(w => {
+                const isSame = (w.name === targetName && w.lat === targetLat && w.lon === targetLon);
+                return !isSame; 
+            });
+
+            if (typeof allTracks !== 'undefined' && Array.isArray(allTracks)) {
+                allTracks.forEach(track => {
+                    track.waypoints = currentStackItem.waypoints;
+                });
+            }
+
+            if (typeof currentPopup !== 'undefined' && currentPopup) map.closePopup();
+            map.eachLayer(layer => {
+                if (layer instanceof L.CircleMarker && layer.options.radius === 7) map.removeLayer(layer);
+            });
+
+            if (typeof renderWaypointsAndPeaks === 'function') {
+                renderWaypointsAndPeaks(allTracks[window.currentActiveIndex || 0]);
+            }
+
+            if (typeof loadRoute === 'function') {
+                loadRoute(window.currentActiveIndex || 0); 
+            }
+            
+        },
+        undo: () => {
+            
+            currentStackItem.waypoints = oldWpts;
+            if (allTracks) allTracks.forEach(track => { track.waypoints = oldWpts; });
+            
+            if (typeof renderWaypointsAndPeaks === 'function') {
+                renderWaypointsAndPeaks(allTracks[window.currentActiveIndex || 0]);
+            }
+            if (typeof loadRoute === 'function') {
+                loadRoute(window.currentActiveIndex || 0);
+            }
+        }
     });
-
-    if (typeof allTracks !== 'undefined' && Array.isArray(allTracks)) {
-        allTracks.forEach(track => {
-            track.waypoints = currentStackItem.waypoints;
-        });
-    }
-
-    if (typeof currentPopup !== 'undefined' && currentPopup) map.closePopup();
-    map.eachLayer(layer => {
-        if (layer instanceof L.CircleMarker && layer.options.radius === 7) map.removeLayer(layer);
-    });
-
-    if (typeof renderWaypointsAndPeaks === 'function') {
-        renderWaypointsAndPeaks(allTracks[window.currentActiveIndex || 0]);
-    }
-
-    if (typeof loadRoute === 'function') {
-        loadRoute(window.currentActiveIndex || 0); 
-    }
 }
 
 
@@ -4354,7 +4345,6 @@ window.renameSubRoute = function(idx) {
     confirmBtn.onclick = function() {
         const newName = input.value.trim();
         if (newName !== "" && newName !== oldName) {
-            
             
             const fileName = window.currentFileNameForDisplay || "default";
             const fileKey = fileName + "_" + idx;
@@ -4689,32 +4679,76 @@ window.deleteSelectedWaypoints = function() {
     const modal = document.getElementById('deleteConfirmModal');
     if (!modal) return;
 
-    
     const pTag = modal.querySelector('p');
-    if (pTag) pTag.innerHTML = `此動作無法復原。<br>您確定要刪除這 ${checked.length} 個選取的航點？`;
+    if (pTag) pTag.innerHTML = `您確定要刪除這 ${checked.length} 個選取的航點？`;
 
     const confirmBtn = document.getElementById('modalDeleteConfirm');
     const cancelBtn = document.getElementById('modalDeleteCancel');
 
     modal.style.display = 'flex';
 
-    
     confirmBtn.onclick = function() {
+        const stackIdx = (typeof window.currentMultiIndex !== 'undefined') ? window.currentMultiIndex : 0;
+        const currentStackItem = multiGpxStack[stackIdx];
+        if (!currentStackItem || !currentStackItem.waypoints) return;
+
+        
+        const oldWpts = JSON.parse(JSON.stringify(currentStackItem.waypoints));
+        
         
         const indices = Array.from(checked)
             .map(cb => parseInt(cb.getAttribute('data-idx')))
             .sort((a, b) => b - a);
 
-        
-        indices.forEach(idx => {
-            executeDelete(idx);
+        historyManager.execute({
+            do: () => {
+                
+                indices.forEach(idx => {
+                    
+                    const target = currentStackItem.waypoints[idx];
+                    if (target) {
+                        updateRawGpxContent(target.name, { lat: target.lat, lng: target.lon }, null, null);
+                        currentStackItem.waypoints = currentStackItem.waypoints.filter(w => {
+                            return !(w.name === target.name && w.lat === target.lat && w.lon === target.lon);
+                        });
+                    }
+                });
+
+                if (typeof allTracks !== 'undefined' && Array.isArray(allTracks)) {
+                    allTracks.forEach(track => { track.waypoints = currentStackItem.waypoints; });
+                }
+
+                if (typeof currentPopup !== 'undefined' && currentPopup) map.closePopup();
+                map.eachLayer(layer => {
+                    if (layer instanceof L.CircleMarker && layer.options.radius === 7) map.removeLayer(layer);
+                });
+
+                if (typeof renderWaypointsAndPeaks === 'function') {
+                    renderWaypointsAndPeaks(allTracks[window.currentActiveIndex || 0]);
+                }
+                if (typeof loadRoute === 'function') {
+                    loadRoute(window.currentActiveIndex || 0);
+                }
+                if (typeof updateSelectedCount === 'function') updateSelectedCount();
+                
+            },
+            undo: () => {
+                
+                currentStackItem.waypoints = oldWpts;
+                if (allTracks) allTracks.forEach(track => { track.waypoints = oldWpts; });
+
+                if (typeof renderWaypointsAndPeaks === 'function') {
+                    renderWaypointsAndPeaks(allTracks[window.currentActiveIndex || 0]);
+                }
+                if (typeof loadRoute === 'function') {
+                    loadRoute(window.currentActiveIndex || 0);
+                }
+                if (typeof updateSelectedCount === 'function') updateSelectedCount();
+            }
         });
 
-        
         const selectAll = document.getElementById('selectAllWpts');
         if (selectAll) selectAll.checked = false;
-        if (typeof updateSelectedCount === 'function') updateSelectedCount();
-
         modal.style.display = 'none';
     };
 
@@ -4767,8 +4801,7 @@ window.initWptSortable = function() {
         fallbackClass: "sortable-fallback",
         ghostClass: 'sortable-ghost',
         onStart: function() {
-            console.log("開始拖移...");
-        },
+         },
         onEnd: function() {
             const stackIdx = (typeof window.currentMultiIndex !== 'undefined') ? window.currentMultiIndex : 0;
             const item = multiGpxStack[stackIdx];
@@ -4789,7 +4822,6 @@ window.initWptSortable = function() {
 
             
             renderWaypointsAndPeaks(allTracks[window.currentActiveIndex || 0]);
-            console.log("排序儲存完畢");
         }
     });
 };
@@ -4844,8 +4876,6 @@ function rebuildXmlFromWaypoints(item) {
         
         const serializer = new XMLSerializer();
         item.content = serializer.serializeToString(xmlDoc);
-        
-        console.log("✅ XML 結構重構完成");
     } catch (error) {
         console.error("❌ rebuildXmlFromWaypoints 發生錯誤:", error);
     }
@@ -5001,3 +5031,92 @@ window.initWptDragSelect = function() {
     tableBody.addEventListener('touchmove', handleMove, { passive: false });
     window.addEventListener('touchend', handleEnd);
 };
+
+/**
+ * 專業版 HistoryManager：支援 do/undo 語法
+ */
+class HistoryManager {
+    constructor() {
+        this.undoStack = [];
+        this.redoStack = [];
+    }
+    
+		 clear() {
+	    this.undoStack = [];
+	    this.redoStack = [];
+	
+	    
+	    if (window.activeFocusCircle && map.hasLayer(window.activeFocusCircle)) {
+	        map.removeLayer(window.activeFocusCircle);
+	        window.activeFocusCircle = null;
+	    }
+	
+	    
+	    map.eachLayer(layer => {
+	        if (layer instanceof L.CircleMarker && layer.options.radius === 7) {
+	            map.removeLayer(layer);
+	        }
+	    });
+	
+	    this.updateUI(); 
+	}
+
+    
+    getBtnState(type) {
+        const hasItems = type === 'undo' ? this.undoStack.length > 0 : this.redoStack.length > 0;
+        return {
+            color: hasItems ? "#1a73e8" : "#ccc",
+            opacity: hasItems ? "1" : "0.6",
+            cursor: hasItems ? "pointer" : "default",
+            disabled: hasItems ? "" : "disabled"
+        };
+    }
+
+    execute(command) {
+        command.do();
+        this.undoStack.push(command);
+        this.redoStack = [];
+        this.updateUI();
+    }
+
+    undo() {
+        if (this.undoStack.length === 0) return;
+        const command = this.undoStack.pop();
+        command.undo();
+        this.redoStack.push(command);
+        this.updateUI();
+    }
+
+    redo() {
+        if (this.redoStack.length === 0) return;
+        const command = this.redoStack.pop();
+        command.do();
+        this.undoStack.push(command);
+        this.updateUI();
+    }
+
+    updateUI() {
+        if (typeof historyManager !== 'undefined') {
+            const u = this.getBtnState('undo');
+            const r = this.getBtnState('redo');
+            const ub = document.getElementById('undoBtn');
+            const rb = document.getElementById('redoBtn');
+            if (ub) { ub.style.color = u.color; ub.style.opacity = u.opacity; ub.disabled = !!u.disabled; }
+            if (rb) { rb.style.color = r.color; rb.style.opacity = r.opacity; rb.disabled = !!r.disabled; }
+        }
+    }
+}
+
+const historyManager = new HistoryManager();
+
+
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        historyManager.undo();
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y')) {
+        e.preventDefault();
+        historyManager.redo();
+    }
+});

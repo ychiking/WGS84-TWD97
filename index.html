@@ -705,8 +705,8 @@
 .wpt-checkbox {
     -webkit-appearance: checkbox !important; 
     appearance: checkbox !important;
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
     cursor: pointer;
     -webkit-tap-highlight-color: transparent; 
 }
@@ -715,12 +715,34 @@
     -webkit-user-select: none;
     user-select: none;
 }
+
+.undo-redo-btn {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    margin: 0 4px;
+    transition: all 0.2s;
+    color: #5f6368;
+}
+
+.undo-redo-btn:hover:not([style*="opacity: 0.3"]) {
+    background: #f1f3f4;
+    border-color: #1a73e8;
+    color: #1a73e8;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
   </style>
 </head>
 
 <body>
   <div id="header">
-    <strong style="font-size: 12px; color: #333;">YCHiking-GPX 路線檢視工具 v2605081</strong>
+    <strong style="font-size: 12px; color: #333;">YCHiking-GPX 路線檢視工具 v2605082</strong>
     <div class="upload-row">
       <input type="file" id="gpxInput" accept=".gpx" style="display: none;" />
       <input type="file" id="multiGpxInput" accept=".gpx" multiple style="display: none;" />
