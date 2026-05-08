@@ -3908,15 +3908,25 @@ let currentEditTask = null;
 
 window.handleWptEdit = function(existingIdx, lat, lon, ele, oldName, timeStr, originalIdx) {
     
-    if (typeof window.currentMultiIndex === 'undefined') window.currentActiveIndex = 0; 
+    if (typeof window.currentActiveIndex === 'undefined') window.currentActiveIndex = 0; 
     let stackIdx = window.currentMultiIndex || 0;
+    
     if (typeof multiGpxStack === 'undefined' || !multiGpxStack) window.multiGpxStack = [];
+    
     if (!multiGpxStack[stackIdx]) {
-        multiGpxStack[stackIdx] = { name: "純航點", points: [], waypoints: [], stats: { totalDistance: 0, totalElevation: 0 }, isCombined: false };
+        multiGpxStack[stackIdx] = { 
+            name: "純航點", 
+            points: [], 
+            waypoints: [], 
+            stats: { totalDistance: 0, totalElevation: 0 }, 
+            isCombined: false 
+        };
     }
+    
     if (typeof allTracks === 'undefined' || !allTracks || allTracks.length === 0) {
         window.allTracks = [multiGpxStack[stackIdx]];
     }
+    
     let activeIdx = window.currentActiveIndex || 0;
     if (!allTracks[activeIdx]) activeIdx = 0;
 
@@ -3925,10 +3935,53 @@ window.handleWptEdit = function(existingIdx, lat, lon, ele, oldName, timeStr, or
     const nameInput = document.getElementById('modalWptName');
     const eleInput = document.getElementById('modalWptEle');
     const confirmBtn = document.getElementById('modalWptConfirm');
+    const deleteBtn = document.getElementById('modalWptDelete');
 
+    if (!modal || !nameInput || !eleInput || !confirmBtn) {
+        console.error("找不到編輯 Modal 的 DOM 元件");
+        return;
+    }
+
+    
     nameInput.value = oldName || "";
     eleInput.value = (ele !== null && ele !== "---") ? ele : 0;
     modal.style.display = 'flex';
+
+    
+    currentEditTask = { existingIdx, lat, lon, ele, oldName, timeStr, originalIdx, stackIdx, activeIdx };
+
+    
+    const isExistingWpt = (existingIdx !== null && existingIdx !== undefined && existingIdx !== -1);
+    
+    if (isExistingWpt) {
+        
+        if (deleteBtn) {
+            deleteBtn.style.display = 'block';
+            deleteBtn.onclick = function() {
+              
+                const currentData = {
+                    name: nameInput.value,
+                    ele: eleInput.value
+                };
+                modal.style.display = 'none';
+                
+                
+                if (typeof window.deleteWaypoint === 'function') {
+                    window.deleteWaypoint(existingIdx, {
+                        task: currentEditTask,
+                        data: currentData
+                    });
+                } else {
+                    alert("找不到刪除處理函式");
+                }
+            };
+        }
+    } else {
+        
+        if (deleteBtn) {
+            deleteBtn.style.display = 'none';
+        }
+    }
 
     
     setTimeout(() => { 
@@ -3936,10 +3989,6 @@ window.handleWptEdit = function(existingIdx, lat, lon, ele, oldName, timeStr, or
         nameInput.select(); 
     }, 100);
 
-    
-    currentEditTask = { existingIdx, lat, lon, ele, oldName, timeStr, originalIdx, stackIdx, activeIdx };
-
-    
     const closeModal = () => {
         modal.style.display = 'none';
         window.removeEventListener('keydown', handleEscKey); 
@@ -3947,15 +3996,11 @@ window.handleWptEdit = function(existingIdx, lat, lon, ele, oldName, timeStr, or
         eleInput.onkeydown = null;
     };
 
-    
     const handleEscKey = (e) => {
-        if (e.key === "Escape") {
-            closeModal();
-        }
+        if (e.key === "Escape") closeModal();
     };
     window.addEventListener('keydown', handleEscKey);
 
-    
     const handleEnterKey = (e) => {
         if (e.key === "Enter" || e.keyCode === 13) {
             e.preventDefault();
@@ -3963,7 +4008,6 @@ window.handleWptEdit = function(existingIdx, lat, lon, ele, oldName, timeStr, or
         }
     };
 
-    
     nameInput.onkeydown = handleEnterKey;
     eleInput.onkeydown = handleEnterKey;
 
@@ -3972,13 +4016,13 @@ window.handleWptEdit = function(existingIdx, lat, lon, ele, oldName, timeStr, or
         const finalName = nameInput.value.trim() || "未命名航點";
         const finalEle = eleInput.value;
 
-        
-        processSave(finalName, finalEle);
+        if (typeof processSave === 'function') {
+            processSave(finalName, finalEle);
+        }
         
         closeModal(); 
     };
 };
-
 
 function processSave(finalName, finalEle) {
     const { existingIdx, lat, lon, timeStr, originalIdx, stackIdx, activeIdx } = currentEditTask;
@@ -4078,26 +4122,71 @@ function processSave(finalName, finalEle) {
     if (modal) modal.style.display = 'none';
 }
 
-window.deleteWaypoint = function(idx) {
+
+window.deleteWaypoint = function(idx, backToEdit = null) {
     const modal = document.getElementById('deleteConfirmModal');
-    if (!modal) return;
+    if (!modal) {
+        console.error("找不到 ID 為 deleteConfirmModal 的視窗");
+        return;
+    }
 
     const pTag = modal.querySelector('p');
-    if (pTag) pTag.innerHTML = `此動作無法復原。<br>您確定要刪除此航點？`;
+    if (pTag) pTag.innerHTML = `此動作可透過復原按鈕還原。<br>您確定要刪除此航點？`;
 
     const confirmBtn = document.getElementById('modalDeleteConfirm');
     const cancelBtn = document.getElementById('modalDeleteCancel');
 
-    modal.style.display = 'flex';
+    
+    const closeModal = () => {
+        modal.style.display = 'none';
+        window.removeEventListener('keydown', handleKeydown);
+    };
 
+    
+    const handleKeydown = (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            confirmBtn.click();
+        } else if (e.key === "Escape") {
+            cancelBtn.click();
+        }
+    };
+
+    
+    modal.style.display = 'flex';
+    window.addEventListener('keydown', handleKeydown);
+
+    
     confirmBtn.onclick = function() {
         executeDelete(idx);
-        modal.style.display = 'none';
+        closeModal();
         if (typeof updateSelectedCount === 'function') updateSelectedCount();
     };
 
+    
     cancelBtn.onclick = function() {
-        modal.style.display = 'none';
+        closeModal();
+        
+        
+        if (backToEdit && typeof window.handleWptEdit === 'function') {
+            
+            const t = backToEdit.task; 
+            const d = backToEdit.data; 
+
+            
+            setTimeout(() => {
+               
+                window.handleWptEdit(
+                    t.existingIdx, 
+                    t.lat, 
+                    t.lon, 
+                    d.ele,   
+                    d.name,  
+                    t.timeStr, 
+                    t.originalIdx
+                );
+            }, 50);
+        } 
     };
 };
 
@@ -4691,26 +4780,38 @@ window.deleteSelectedWaypoints = function() {
     const confirmBtn = document.getElementById('modalDeleteConfirm');
     const cancelBtn = document.getElementById('modalDeleteCancel');
 
+    const closeModal = () => {
+        modal.style.display = 'none';
+        window.removeEventListener('keydown', handleKeydown);
+    };
+
+    const handleKeydown = (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            confirmBtn.click();
+        } else if (e.key === "Escape") {
+            cancelBtn.click();
+        }
+    };
+
     modal.style.display = 'flex';
+    window.addEventListener('keydown', handleKeydown);
 
     confirmBtn.onclick = function() {
         const stackIdx = (typeof window.currentMultiIndex !== 'undefined') ? window.currentMultiIndex : 0;
         const currentStackItem = multiGpxStack[stackIdx];
         if (!currentStackItem || !currentStackItem.waypoints) return;
 
-        
         const oldWpts = JSON.parse(JSON.stringify(currentStackItem.waypoints));
-        
-        
         const indices = Array.from(checked)
             .map(cb => parseInt(cb.getAttribute('data-idx')))
             .sort((a, b) => b - a);
 
         historyManager.execute({
+            
+            fileIdx: stackIdx, 
             do: () => {
-                
                 indices.forEach(idx => {
-                    
                     const target = currentStackItem.waypoints[idx];
                     if (target) {
                         updateRawGpxContent(target.name, { lat: target.lat, lng: target.lon }, null, null);
@@ -4736,10 +4837,8 @@ window.deleteSelectedWaypoints = function() {
                     loadRoute(window.currentActiveIndex || 0);
                 }
                 if (typeof updateSelectedCount === 'function') updateSelectedCount();
-                
             },
             undo: () => {
-                
                 currentStackItem.waypoints = oldWpts;
                 if (allTracks) allTracks.forEach(track => { track.waypoints = oldWpts; });
 
@@ -4755,12 +4854,10 @@ window.deleteSelectedWaypoints = function() {
 
         const selectAll = document.getElementById('selectAllWpts');
         if (selectAll) selectAll.checked = false;
-        modal.style.display = 'none';
+        closeModal();
     };
 
-    cancelBtn.onclick = function() {
-        modal.style.display = 'none';
-    };
+    cancelBtn.onclick = closeModal;
 };
 
 window.updateSelectedCount = function() {
