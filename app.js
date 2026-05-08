@@ -4337,15 +4337,12 @@ window.renameSubRoute = function(idx) {
     const closeModal = () => {
         modal.style.display = 'none';
         window.removeEventListener('keydown', handleEscKey);
+        input.removeEventListener('keydown', handleEnterKey);
     };
 
-    const handleEscKey = (e) => { if (e.key === "Escape") closeModal(); };
-    window.addEventListener('keydown', handleEscKey);
-
-    confirmBtn.onclick = function() {
+    const handleConfirm = () => {
         const newName = input.value.trim();
         if (newName !== "" && newName !== oldName) {
-            
             const fileName = window.currentFileNameForDisplay || "default";
             const fileKey = fileName + "_" + idx;
 
@@ -4360,10 +4357,23 @@ window.renameSubRoute = function(idx) {
             }
 
             renderRouteInfo();
-            
         }
         closeModal();
     };
+
+    const handleEnterKey = (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault(); 
+            handleConfirm();
+        }
+    };
+
+    const handleEscKey = (e) => { if (e.key === "Escape") closeModal(); };
+
+    window.addEventListener('keydown', handleEscKey);
+    input.addEventListener('keydown', handleEnterKey);
+
+    confirmBtn.onclick = handleConfirm;
 };
 
 const searchControl = L.control({ position: 'topright' });
@@ -4593,9 +4603,7 @@ function updateRouteSelectDropdown() {
         routeSelect.appendChild(opt);
     });
 }
-/**
- * 需求同步連動結合路線
- */
+
 function syncCombinedWaypoints(oldName, oldLatLng, oldTime, updateFn) {
     if (window.multiGpxStack) {
         window.multiGpxStack.forEach(item => {
@@ -4612,9 +4620,7 @@ function syncCombinedWaypoints(oldName, oldLatLng, oldTime, updateFn) {
     }
 }
 
-/**
- * 更新原始 XML 內容，徹底解決點擊 GPX Bar 名字會還原的問題
- */
+
 function updateRawGpxContent(name, oldLatLng, newLat, newLon) {
     const stackIdx = (window.currentMultiIndex !== undefined) ? window.currentMultiIndex : 0;
     const item = multiGpxStack[stackIdx];
@@ -4943,42 +4949,30 @@ window.initWptDragSelect = function() {
     const tableBody = document.getElementById("wptTableBody");
     if (!tableBody) return;
 
-    
     tableBody.onmousedown = null;
     tableBody.onmouseover = null;
     tableBody.ontouchstart = null;
 
-    
     const handleStart = (e) => {
         const target = e.target;
         const row = target.closest('tr');
         if (!row) return;
 
         const checkbox = row.querySelector('.wpt-checkbox');
-        
         const td = target.closest('td');
-        
-        
+
         if (checkbox && td && td.contains(checkbox)) {
             isWptDragging = true;
             wptDragStartPos = row.sectionRowIndex;
-
-            
-            wptDragTargetState = !checkbox.checked;
-            checkbox.checked = wptDragTargetState;
-
-            
             const allBoxes = tableBody.querySelectorAll('.wpt-checkbox');
             wptInitialStates = Array.from(allBoxes).map(cb => cb.checked);
 
-            if (typeof updateSelectedCount === 'function') updateSelectedCount();
-
-            
-            if (e.type === 'touchstart') {
-                
-                
-            } else {
-                e.preventDefault();
+            if (e.type === 'mousedown') {
+                window.addEventListener('mousemove', handleMove);
+                window.addEventListener('mouseup', handleEnd, { once: true });
+            } else if (e.type === 'touchstart') {
+                window.addEventListener('touchmove', handleMove, { passive: false });
+                window.addEventListener('touchend', handleEnd, { once: true });
             }
         }
     };
@@ -4988,7 +4982,6 @@ window.initWptDragSelect = function() {
 
         let targetRow;
         if (e.type === 'touchmove') {
-            
             const touch = e.touches[0];
             const element = document.elementFromPoint(touch.clientX, touch.clientY);
             targetRow = element ? element.closest('tr') : null;
@@ -4999,6 +4992,11 @@ window.initWptDragSelect = function() {
         if (targetRow) {
             const currentPos = targetRow.sectionRowIndex;
             const allBoxes = tableBody.querySelectorAll('.wpt-checkbox');
+
+            if (wptDragStartPos !== -1) {
+                wptDragTargetState = allBoxes[wptDragStartPos].checked;
+            }
+
             const start = Math.min(wptDragStartPos, currentPos);
             const end = Math.max(wptDragStartPos, currentPos);
 
@@ -5011,30 +5009,27 @@ window.initWptDragSelect = function() {
             });
 
             if (typeof updateSelectedCount === 'function') updateSelectedCount();
-            
-            
             if (e.type === 'touchmove') e.preventDefault();
         }
     };
 
     const handleEnd = () => {
         isWptDragging = false;
+        wptDragStartPos = -1;
+        window.removeEventListener('mousemove', handleMove);
+        window.removeEventListener('touchmove', handleMove);
+        
+        setTimeout(() => {
+            if (typeof updateSelectedCount === 'function') updateSelectedCount();
+        }, 50);
     };
 
-    
+    tableBody.removeEventListener('mousedown', handleStart);
     tableBody.addEventListener('mousedown', handleStart);
-    tableBody.addEventListener('mouseover', handleMove);
-    window.addEventListener('mouseup', handleEnd);
-
-    
-    tableBody.addEventListener('touchstart', handleStart, { passive: false });
-    tableBody.addEventListener('touchmove', handleMove, { passive: false });
-    window.addEventListener('touchend', handleEnd);
+    tableBody.removeEventListener('touchstart', handleStart);
+    tableBody.addEventListener('touchstart', handleStart, { passive: true });
 };
 
-/**
- * 專業版 HistoryManager：支援 do/undo 語法
- */
 class HistoryManager {
     constructor() {
         this.undoStack = [];
