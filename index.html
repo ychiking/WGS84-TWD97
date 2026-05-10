@@ -739,16 +739,6 @@
 }
 
 
-#navShortcuts {
-    display: flex;
-    flex-wrap: wrap; 
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    background: transparent;
-    box-shadow: none;
-    margin-bottom: 2px;
-}
 
 #map:fullscreen #navShortcuts::before,
 .iphone-fullscreen #navShortcuts::before,
@@ -768,7 +758,7 @@
     display: flex;
     flex-wrap: wrap; 
     align-items: center;
-    gap: 8px;
+    gap: 4px;
     width: 100%;
     position: relative;
     margin-top: 0px; 
@@ -777,13 +767,16 @@
 
 #navShortcuts::before {
     content: "";
-    display: block;
+    display: flex;
     width: 100vw;
     height: 1px;
     background-color: #ddd;
     position: absolute;
     top: -6px; 
-    left: -14px; 
+    flex-wrap: nowrap; /* 強制不換行 */
+    overflow-x: auto;  /* 超出時可橫向滑動 */
+    -webkit-overflow-scrolling: touch;
+    white-space: nowra
 }
 
 #map:fullscreen #navShortcuts::before,
@@ -819,7 +812,7 @@
     z-index: 2147483647 !important;
     width: auto !important;
     min-width: fit-content !important; 
-    gap: 15px !important;             
+    gap: 8px !important;             
 }
 
 
