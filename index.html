@@ -69,7 +69,7 @@
     }
 
     .subtitle {
-      margin-top: 8px;
+      margin-top: 0px;
       font-size: 14px;
       color: #555;
       line-height: 1.4;
@@ -737,28 +737,101 @@
     color: #1a73e8;
     box-shadow: 0 1px 3px rgba(0,0,0,0.12);
 }
-#navShortcuts:not(:empty)::before {
-    content: "";
-    display: block;      /* 關鍵：確保它獨佔一行 */
-    width: 100vw;        /* 寬度撐滿視窗 */
-    height: 1px;         /* 線條高度 */
-    background-color: #ddd; /* 顏色 */
-}
 
-/* 確保容器可以換行 */
+
 #navShortcuts {
     display: flex;
     flex-wrap: wrap; 
     align-items: center;
     gap: 8px;
     width: 100%;
-} 
+    background: transparent;
+    box-shadow: none;
+    margin-bottom: 2px;
+}
+
+#map:fullscreen #navShortcuts::before,
+.iphone-fullscreen #navShortcuts::before,
+:fullscreen #navShortcuts::before {
+    content: none !important;
+    display: none !important;
+}
+
+:fullscreen ~ .wpt-modal-overlay,
+:fullscreen ~ .modal-overlay,
+:fullscreen ~ #deleteConfirmModal {
+    z-index: 2147483647 !important;
+    display: flex !important;
+}
+
+#navShortcuts {
+    display: flex;
+    flex-wrap: wrap; 
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    position: relative;
+    margin-top: 0px; 
+}
+
+
+#navShortcuts::before {
+    content: "";
+    display: block;
+    width: 100vw;
+    height: 1px;
+    background-color: #ddd;
+    position: absolute;
+    top: -6px; 
+    left: -14px; 
+}
+
+#map:fullscreen #navShortcuts::before,
+.iphone-fullscreen #navShortcuts::before,
+#map:fullscreen #navShortcuts,
+.iphone-fullscreen #navShortcuts:empty {
+    content: none !important;
+    display: none !important;
+    background: none !important;
+    box-shadow: none !important;
+}
+
+#map:fullscreen #navShortcuts:empty,
+.iphone-fullscreen #navShortcuts:empty {
+    display: none !important;
+}
+
+#map:fullscreen #navShortcuts,
+.iphone-fullscreen #navShortcuts {
+    display: flex !important;
+    position: absolute !important;
+    top: 25px !important;            
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+
+    background: rgba(255, 255, 255, 0.95) !important; 
+    padding: 6px 10px !important;   
+    border-radius: 35px !important;   
+    
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4) !important;
+    border: 1px solid rgba(0,0,0,0.1) !important;
+    
+    z-index: 2147483647 !important;
+    width: auto !important;
+    min-width: fit-content !important; 
+    gap: 15px !important;             
+}
+
+
+
+
+
   </style>
 </head>
 
 <body>
   <div id="header">
-    <strong style="font-size: 12px; color: #333;">YCHiking-GPX 路線檢視工具 v2605083</strong>
+    <strong style="font-size: 12px; color: #333;">YCHiking-GPX 路線檢視工具 v2605101</strong>
     <div class="upload-row">
       <input type="file" id="gpxInput" accept=".gpx" style="display: none;" />
       <input type="file" id="multiGpxInput" accept=".gpx" multiple style="display: none;" />
