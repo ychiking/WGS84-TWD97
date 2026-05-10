@@ -737,6 +737,22 @@
     color: #1a73e8;
     box-shadow: 0 1px 3px rgba(0,0,0,0.12);
 }
+#navShortcuts:not(:empty)::before {
+    content: "";
+    display: block;      /* 關鍵：確保它獨佔一行 */
+    width: 100vw;        /* 寬度撐滿視窗 */
+    height: 1px;         /* 線條高度 */
+    background-color: #ddd; /* 顏色 */
+}
+
+/* 確保容器可以換行 */
+#navShortcuts {
+    display: flex;
+    flex-wrap: wrap; 
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+} 
   </style>
 </head>
 
