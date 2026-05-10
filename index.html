@@ -756,8 +756,10 @@
 
 #navShortcuts {
     display: flex;
-    flex-wrap: wrap; 
+    flex-wrap: nowrap; 
     align-items: center;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
     gap: 4px;
     width: 100%;
     position: relative;
