@@ -349,7 +349,6 @@
       visibility: visible;
     }
 
-    /* 多檔案底部欄 */
     .multi-gpx-bar {
       position: absolute;
       bottom: 0;
@@ -438,7 +437,6 @@
       cursor: pointer;
     }
 
-    /* 新增：匯出按鈕樣式 */
     .gpx-file-btn.export-btn {
       flex: 0 0 auto !important;
       border: 1px solid #4CAF50 !important;
@@ -520,7 +518,6 @@
       line-height: 1;
     }
 
-    /* 列表操作圖示 */
     .wpt-action-icon {
         font-size: 18px !important;
         vertical-align: middle;
@@ -738,8 +735,6 @@
     box-shadow: 0 1px 3px rgba(0,0,0,0.12);
 }
 
-
-
 #map:fullscreen #navShortcuts::before,
 .iphone-fullscreen #navShortcuts::before,
 :fullscreen #navShortcuts::before {
@@ -775,8 +770,8 @@
     background-color: #ddd;
     position: absolute;
     top: -6px; 
-    flex-wrap: nowrap; /* 強制不換行 */
-    overflow-x: auto;  /* 超出時可橫向滑動 */
+    flex-wrap: nowrap;
+    overflow-x: auto; 
     -webkit-overflow-scrolling: touch;
     white-space: nowra
 }
@@ -800,33 +795,91 @@
 .iphone-fullscreen #navShortcuts {
     display: flex !important;
     position: absolute !important;
-    top: 40px !important;            
     left: 50% !important;
     transform: translateX(-50%) !important;
-
-    background: rgba(255, 255, 255, 0.95) !important; 
-    padding: 6px 10px !important;   
-    border-radius: 35px !important;   
-    
-    box-shadow: 0 4px 20px rgba(0,0,0,0.4) !important;
-    border: 1px solid rgba(0,0,0,0.1) !important;
-    
     z-index: 2147483647 !important;
+    
+    background: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    
     width: auto !important;
-    min-width: fit-content !important; 
-    gap: 8px !important;             
+    gap: 10px !important;
+    transition: top 0.3s ease; 
 }
 
+#routeSelectContainer {
+    display: none;
+    position: absolute !important;
+    top: 15px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    z-index: 10001 !important;
+    
+    background: #1a73e8 !important; 
+    padding: 4px 12px !important;
+    border-radius: 20px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+    border: 1px solid rgba(255,255,255,0.2) !important;
+    white-space: nowrap !important;
+}
 
+#routeSelect {
+    border: none !important;
+    background: transparent !important;
+    color: white !important;       
+    font-size: 14px !important;
+    font-weight: bold !important;
+    outline: none !important;
+    cursor: pointer;
+    width: 240px;
 
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 20px;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right center;
+}
 
+#map:fullscreen #routeSelectContainer,
+.iphone-fullscreen #routeSelectContainer {
+    top: 30px !important; 
+}
+
+.navShortcuts-locked {
+    pointer-events: none !important; 
+    opacity: 0.4 !important;     
+    filter: grayscale(100%) !important;
+    transition: opacity 0.3s ease;  
+}
+
+.wpt-modal-content h3 {
+    font-size: 20px !important;   
+    margin-bottom: 15px !important;
+}
+
+.wpt-modal-content label {
+    font-size: 14px !important;   
+    font-weight: bold !important;
+}
+
+.wpt-modal-content input, 
+.wpt-modal-content button {
+    font-size: 16px !important;  
+}
+
+.wpt-modal-content span {
+    font-size: 24px !important;    
+}
 
   </style>
 </head>
 
 <body>
   <div id="header">
-    <strong style="font-size: 12px; color: #333;">YCHiking-GPX 路線檢視工具 v2605101</strong>
+    <strong style="font-size: 12px; color: #333;">YCHiking-GPX 路線檢視工具 v2605102</strong>
     <div class="upload-row">
       <input type="file" id="gpxInput" accept=".gpx" style="display: none;" />
       <input type="file" id="multiGpxInput" accept=".gpx" multiple style="display: none;" />

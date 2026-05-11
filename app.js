@@ -441,10 +441,29 @@ function showFreeClickPopup(latlng, searchTitle = null, searchAddr = null) {
     if (currentPopup && map.hasLayer(currentPopup)) {
         currentPopup.setLatLng(latlng).setContent(content);
     } else {
-        currentPopup = L.popup({ autoClose: false, closeOnClick: false })
+        currentPopup = L.popup({ autoClose: false, closeOnClick: false,})
             .setLatLng(latlng)
             .setContent(content)
             .openOn(map);
+    }
+    const routeSelect = document.getElementById('routeSelectContainer');
+    
+    const isRouteSelectVisible = routeSelect && 
+                                 window.getComputedStyle(routeSelect).display !== 'none';
+
+    if (isRouteSelectVisible) {
+        const clickPoint = map.latLngToContainerPoint([lat, lon]);
+        
+        
+        if (clickPoint.y < 250) {
+            
+            const offset = 250 - clickPoint.y;
+            
+            requestAnimationFrame(() => {
+                
+                map.panBy([0, -offset], { animate: true });
+            });
+        }
     }
 }
 
@@ -937,8 +956,10 @@ function initProgressBar() {
     }
 }
 
-function loadRoute(index, customColor = null) {
+
+function loadRoute(index, customColor = null, focusPos = null) {
     window.currentActiveIndex = index;
+    
     
     map.eachLayer(layer => {
         if (layer instanceof L.CircleMarker && layer.options.radius === 7) {
@@ -947,9 +968,7 @@ function loadRoute(index, customColor = null) {
     });
     if (window.activeFocusCircle) window.activeFocusCircle = null;
     
-
     map.closePopup();
-
     map.closePopup();
     if (typeof window.clearABSettings === 'function') window.clearABSettings();
 
@@ -958,22 +977,21 @@ function loadRoute(index, customColor = null) {
                 : allTracks[index];
     if (!sel) return;
 
-		const fileName = window.currentFileNameForDisplay || "default";
-		const fileKey = fileName + "_" + index;
+    const fileName = window.currentFileNameForDisplay || "default";
+    const fileKey = fileName + "_" + index;
 
-		if (window.customNameCache && window.customNameCache[fileKey]) {
-		    const cachedName = window.customNameCache[fileKey];
-		
-		    sel.name = cachedName; 
-		    if (allTracks && allTracks[index]) allTracks[index].name = cachedName;
-		    if (window.multiGpxStack && window.multiGpxStack[index]) {
-		        window.multiGpxStack[index].name = cachedName;
-		    }
-		    const routeSelect = document.getElementById("routeSelect");
-		    if (routeSelect && routeSelect.options[index]) {
-		        routeSelect.options[index].text = cachedName;
-		    }
-		}
+    if (window.customNameCache && window.customNameCache[fileKey]) {
+        const cachedName = window.customNameCache[fileKey];
+        sel.name = cachedName; 
+        if (allTracks && allTracks[index]) allTracks[index].name = cachedName;
+        if (window.multiGpxStack && window.multiGpxStack[index]) {
+            window.multiGpxStack[index].name = cachedName;
+        }
+        const routeSelect = document.getElementById("routeSelect");
+        if (routeSelect && routeSelect.options[index]) {
+            routeSelect.options[index].text = cachedName;
+        }
+    }
     
     const wptToggleContainer = document.getElementById("wptToggleContainer");
     if (wptToggleContainer) wptToggleContainer.style.display = "block";
@@ -1026,7 +1044,6 @@ function loadRoute(index, customColor = null) {
             }
 
             if (i === stackIdx) {
-                
                 const isSelectingCombined = (index === 0 || sel.name.includes("結合"));
                 if (isSelectingCombined) {
                     layer.setStyle({ opacity: 0, weight: 0 });
@@ -1081,12 +1098,7 @@ function loadRoute(index, customColor = null) {
                 }
                 if (!hoverMarker) {
                     hoverMarker = L.circleMarker([trackPoints[idx].lat, trackPoints[idx].lon], { 
-                        radius: 7, 
-                        color: '#ffffff', 
-                        weight: 2, 
-                        fillColor: '#1a73e8', 
-                        fillOpacity: 1,
-                        interactive: false 
+                        radius: 7, color: '#ffffff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1, interactive: false 
                     }).addTo(map);
                 } else if (!map.hasLayer(hoverMarker)) {
                     hoverMarker.addTo(map);
@@ -1163,165 +1175,166 @@ function loadRoute(index, customColor = null) {
             return true;
         });
 
-        displayWaypoints.forEach((w) => {
-            let initialTIdx = null; 
-            if (trackPoints && trackPoints.length > 0) {
-                let minD = Infinity;
-                let nearestIdx = -1;
-                trackPoints.forEach((tp, pi) => {
-                    let d = Math.sqrt((w.lat - tp.lat) ** 2 + (w.lon - tp.lon) ** 2);
-                    if (d < minD) { minD = d; nearestIdx = pi; }
-                });
-                if (nearestIdx !== -1 && minD * 111000 <= 15) {
-                    initialTIdx = nearestIdx;
-                }
-            }
-
-            const wm = L.marker([w.lat, w.lon], { 
-                icon: wptIcon, 
-                draggable: true 
-            }).addTo(map);
-            
-            let previousLatLng = wm.getLatLng();
-            let wasOnPath = (initialTIdx !== null);
-
-            const isAlways = typeof showWptNameAlways !== 'undefined' && showWptNameAlways;
-            wm.bindTooltip(w.name, { 
-                permanent: isAlways, direction: isAlways ? 'right' : 'top', 
-                offset: isAlways ? [10, 0] : [0, -10],
-                className: isAlways ? 'wpt-label-label' : ''
-            });
-            if (isAlways) wm.openTooltip();
-
-            wm.on('dragend', function(event) {
-    const marker = event.target;
-    const newLatLng = marker.getLatLng();
-    const newLat = newLatLng.lat;
-    const newLon = newLatLng.lng;
-
-    let nearestIdx = -1;
-    let minD = Infinity;
-    if (trackPoints && trackPoints.length > 0) {
-        trackPoints.forEach((tp, pi) => {
-            const d = Math.sqrt((newLat - tp.lat) ** 2 + (newLon - tp.lon) ** 2);
-            if (d < minD) { minD = d; nearestIdx = pi; }
-        });
-    }
-    const isOnPath = (nearestIdx !== -1 && (minD * 111000 <= 15));
-
-    
-    let confirmMsg = isOnPath 
-        ? `確定將「${w.name}」移至此路徑位置？<br>(高度、距離與時間將同步更新)`
-        : (wasOnPath ? `確定將「${w.name}」移至此處？<br>(此處不在路徑上，將遺失高度、距離與時間資訊)` 
-                     : `確定將「${w.name}」移至此處？<br>(此處不在路徑上，將遺失高度與時間資訊)`);
-
-    
-    window.showAppConfirm("移動航點確認", confirmMsg, function() {
-        
-        const oldWptSnapshot = JSON.parse(JSON.stringify(w));
-        const startPos = { lat: previousLatLng.lat, lng: previousLatLng.lng };
-        const endPos = { lat: newLat, lng: newLon };
-
-        const currentFileIdx = window.currentMultiIndex; 
-
-        historyManager.execute({
-            fileIdx: currentFileIdx, 
-            do: function() {
-                if (window.currentMultiIndex !== this.fileIdx) {
-                    if (typeof switchMultiGpx === 'function') switchMultiGpx(this.fileIdx);
-                }
-
-                window.isDraggingWpt = true; 
-
-                const updateLogic = (targetWpt) => {
-                    targetWpt.lat = endPos.lat;
-                    targetWpt.lon = endPos.lng;
-                    if (isOnPath) {
-                        const tp = trackPoints[nearestIdx];
-                        targetWpt.ele = tp.ele;
-                        targetWpt.time = tp.time;
-                        targetWpt.localTime = tp.timeLocal;
-                        targetWpt.distance = tp.distance;
-                    } else {
-                        targetWpt.ele = 0;
-                        targetWpt.time = new Date().toISOString();
-                        targetWpt.localTime = formatDate(new Date(new Date().getTime() + 8 * 3600000));
-                        targetWpt.distance = undefined;
-                    }
-                };
-
-                syncCombinedWaypoints(w.name, L.latLng(startPos.lat, startPos.lng), w.time, updateLogic);
-                updateLogic(w);
-                updateRawGpxContent(w.name, L.latLng(startPos.lat, startPos.lng), endPos.lat, endPos.lng);
-
-                previousLatLng = L.latLng(endPos.lat, endPos.lng);
-                wasOnPath = isOnPath;
-
-                loadRoute(window.currentActiveIndex || 0); 
-
-                
-                if (!document.fullscreenElement && typeof renderWaypointsAndPeaks === 'function') {
-                    renderWaypointsAndPeaks(sel); 
-                }
-
-                map.eachLayer(layer => {
-                    if (layer instanceof L.CircleMarker && layer.options.radius === 7) map.removeLayer(layer);
-                });
-                window.activeFocusCircle = L.circleMarker([endPos.lat, endPos.lng], {
-                    radius: 7, color: '#ffffff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1, interactive: false 
-                }).addTo(map);
-
-                setTimeout(() => { window.isDraggingWpt = false; }, 100);
-            },
-            undo: function() {
-                if (window.currentMultiIndex !== this.fileIdx) {
-                    if (typeof switchMultiGpx === 'function') {
-                        switchMultiGpx(this.fileIdx);
-                    }
-                }
-
-                Object.assign(w, oldWptSnapshot);
-                updateRawGpxContent(w.name, L.latLng(endPos.lat, endPos.lng), startPos.lat, startPos.lng);
-                
-                previousLatLng = L.latLng(startPos.lat, startPos.lng);
-                wasOnPath = (oldWptSnapshot.distance !== undefined);
-
-                loadRoute(window.currentActiveIndex || 0);
-
-                
-                if (!document.fullscreenElement && typeof renderWaypointsAndPeaks === 'function') {
-                    renderWaypointsAndPeaks(sel);
-                }
-
-                map.eachLayer(layer => {
-                    if (layer instanceof L.CircleMarker && layer.options.radius === 7) map.removeLayer(layer);
-                });
-                window.activeFocusCircle = L.circleMarker([startPos.lat, startPos.lng], {
-                    radius: 7, color: '#ffffff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1, interactive: false 
-                }).addTo(map);
-            }
-        });
-    }, function() {
-        
-        marker.setLatLng(previousLatLng);
-    });
-});
-
-            wm.on('click', (e) => { 
-                L.DomEvent.stopPropagation(e); 
-                let clickTIdx = null;
-                if (trackPoints && trackPoints.length > 0) {
-                    let minD = Infinity;
-                    trackPoints.forEach((tp, pi) => {
-                        let d = Math.sqrt((w.lat - tp.lat) ** 2 + (w.lon - tp.lon) ** 2);
-                        if (d < minD) { minD = d; clickTIdx = pi; }
-                    });
-                    if (minD * 111000 > 15) clickTIdx = null;
-                }
-                showCustomPopup(clickTIdx !== null ? clickTIdx : 999999, w.name, clickTIdx !== null ? "wpt" : 0, w.lat, w.lon); 
-            });
-            wptMarkers.push(wm);
-        });
+				displayWaypoints.forEach((w) => {
+				    let initialTIdx = null; 
+				    if (trackPoints && trackPoints.length > 0) {
+				        let minD = Infinity;
+				        let nearestIdx = -1;
+				        trackPoints.forEach((tp, pi) => {
+				            let d = Math.sqrt((w.lat - tp.lat) ** 2 + (w.lon - tp.lon) ** 2);
+				            if (d < minD) { minD = d; nearestIdx = pi; }
+				        });
+				        if (nearestIdx !== -1 && minD * 111000 <= 15) {
+				            initialTIdx = nearestIdx;
+				        }
+				    }
+				
+				    
+				    let drawLat = w.lat;
+				    let drawLon = w.lon;
+				    let isFocusTarget = false;
+				
+				    if (focusPos) {
+				        const distToFocus = Math.sqrt(Math.pow(w.lat - focusPos.lat, 2) + Math.pow(w.lon - focusPos.lng, 2));
+				        if (distToFocus < 0.00001 || w.name === currentEditTask?.oldName) {
+				            drawLat = focusPos.lat;
+				            drawLon = focusPos.lng;
+				            isFocusTarget = true;
+				            
+				            w.lat = focusPos.lat;
+				            w.lon = focusPos.lng;
+				        }
+				    }
+				
+				    const wm = L.marker([drawLat, drawLon], { 
+				        icon: wptIcon, 
+				        draggable: true,
+				        zIndexOffset: isFocusTarget ? 2000 : 0
+				    }).addTo(map);
+				    
+				    
+				    let previousLatLng = wm.getLatLng(); 
+				    let wasOnPath = (initialTIdx !== null);
+				
+				    const isAlways = typeof showWptNameAlways !== 'undefined' && showWptNameAlways;
+				    const shouldOpen = isAlways || isFocusTarget;
+				
+				    wm.bindTooltip(w.name, { 
+				        permanent: shouldOpen, direction: shouldOpen ? 'right' : 'top', 
+				        offset: shouldOpen ? [10, 0] : [0, -10],
+				        className: shouldOpen ? 'wpt-label-label' : ''
+				    });
+				    if (shouldOpen) wm.openTooltip();
+				
+				    wm.on('dragend', function(event) {
+				        const marker = event.target;
+				        const newLatLng = marker.getLatLng();
+				        const newLat = newLatLng.lat;
+				        const newLon = newLatLng.lng;
+				
+				        
+				        let nearestIdx = -1;
+				        let minD = Infinity;
+				        if (trackPoints && trackPoints.length > 0) {
+				            trackPoints.forEach((tp, pi) => {
+				                const d = Math.sqrt((newLat - tp.lat) ** 2 + (newLon - tp.lon) ** 2);
+				                if (d < minD) { minD = d; nearestIdx = pi; }
+				            });
+				        }
+				        const isOnPath = (nearestIdx !== -1 && (minD * 111000 <= 15));
+				
+				        
+				        let confirmMsg = isOnPath 
+				            ? `確定將「${w.name}」移至此路徑位置？<br>(高度、距離與時間將同步更新)`
+				            : (wasOnPath ? `確定將「${w.name}」移至此處？<br>(此處不在路徑上，將遺失高度、距離與時間資訊)` 
+				                         : `確定將「${w.name}」移至此處？<br>(此處不在路徑上，將遺失高度與時間資訊)`);
+				
+				        window.showAppConfirm("移動航點確認", confirmMsg, function() {
+				            const oldWptSnapshot = JSON.parse(JSON.stringify(w));
+				            const startPos = { lat: previousLatLng.lat, lng: previousLatLng.lng };
+				            const endPos = { lat: newLat, lng: newLon };
+				            const currentFileIdx = window.currentMultiIndex; 
+				
+				            historyManager.execute({
+				                fileIdx: currentFileIdx, 
+				                do: function() {
+				                    if (window.currentMultiIndex !== this.fileIdx) {
+				                        if (typeof switchMultiGpx === 'function') switchMultiGpx(this.fileIdx);
+				                    }
+				                    window.isDraggingWpt = true; 
+				
+				                    
+				                    const updateLogic = (targetWpt) => {
+				                        targetWpt.lat = endPos.lat;
+				                        targetWpt.lon = endPos.lng;
+				                        if (isOnPath) {
+				                            const tp = trackPoints[nearestIdx];
+				                            targetWpt.ele = tp.ele;
+				                            targetWpt.time = tp.time;
+				                            targetWpt.localTime = tp.timeLocal; 
+				                            targetWpt.distance = tp.distance;
+				                        } else {
+				                            targetWpt.ele = 0;
+				                            targetWpt.time = new Date().toISOString();
+				                            targetWpt.localTime = formatDate(new Date(new Date().getTime() + 8 * 3600000));
+				                            targetWpt.distance = undefined; 
+				                        }
+				                    };
+				
+				                    syncCombinedWaypoints(w.name, L.latLng(startPos.lat, startPos.lng), w.time, updateLogic);
+				                    updateLogic(w);
+				                    updateRawGpxContent(w.name, L.latLng(startPos.lat, startPos.lng), endPos.lat, endPos.lng);
+				
+				                    previousLatLng = L.latLng(endPos.lat, endPos.lng);
+				                    wasOnPath = isOnPath;
+				
+				                    
+				                    loadRoute(window.currentActiveIndex || 0, null, endPos); 
+				
+				                    if (!document.fullscreenElement && typeof renderWaypointsAndPeaks === 'function') {
+				                        renderWaypointsAndPeaks(sel); 
+				                    }
+				
+				                    setTimeout(() => { window.isDraggingWpt = false; }, 100);
+				                },
+				                undo: function() {
+				                    if (window.currentMultiIndex !== this.fileIdx) {
+				                        if (typeof switchMultiGpx === 'function') switchMultiGpx(this.fileIdx);
+				                    }
+				                    Object.assign(w, oldWptSnapshot);
+				                    updateRawGpxContent(w.name, L.latLng(endPos.lat, endPos.lng), startPos.lat, startPos.lng);
+				                    
+				                    previousLatLng = L.latLng(startPos.lat, startPos.lng);
+				                    wasOnPath = (oldWptSnapshot.distance !== undefined);
+				
+				                    loadRoute(window.currentActiveIndex || 0, null, startPos);
+				
+				                    if (!document.fullscreenElement && typeof renderWaypointsAndPeaks === 'function') {
+				                        renderWaypointsAndPeaks(sel);
+				                    }
+				                }
+				            });
+				        }, function() {
+				            marker.setLatLng(previousLatLng); 
+				        });
+				    });
+				
+				    wm.on('click', (e) => { 
+				        L.DomEvent.stopPropagation(e); 
+				        let clickTIdx = null;
+				        if (trackPoints && trackPoints.length > 0) {
+				            let minD = Infinity;
+				            trackPoints.forEach((tp, pi) => {
+				                let d = Math.sqrt((w.lat - tp.lat) ** 2 + (w.lon - tp.lon) ** 2);
+				                if (d < minD) { minD = d; clickTIdx = pi; }
+				            });
+				            if (minD * 111000 > 15) clickTIdx = null;
+				        }
+				        
+				        showCustomPopup(clickTIdx !== null ? clickTIdx : 999999, w.name, clickTIdx !== null ? "wpt" : 0, w.lat, w.lon); 
+				    });
+				    wptMarkers.push(wm);
+				});
     }
 
     const startLat = (trackPoints.length > 0) ? trackPoints[0].lat : (sel.waypoints?.[0]?.lat || null);
@@ -1336,11 +1349,17 @@ function loadRoute(index, customColor = null) {
         }
     }
     
-    
     if (typeof renderRouteInfo === 'function') renderRouteInfo();
     if (typeof renderWaypointsAndPeaks === 'function') renderWaypointsAndPeaks(sel); 
     if (typeof initProgressBar === 'function') initProgressBar();
-		}
+
+    
+    if (focusPos) {
+        window.activeFocusCircle = L.circleMarker([focusPos.lat, focusPos.lng], {
+            radius: 7, color: '#ffffff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1, interactive: false 
+        }).addTo(map);
+    }
+}
  
 function toggleWptNames() {
     showWptNameAlways = !showWptNameAlways;
@@ -1905,6 +1924,27 @@ function showCustomPopup(idx, title, typeOrEle = null, realLat = null, realLon =
     } else {
         currentPopup = L.popup({ autoClose: false, closeOnClick: false }).setLatLng([lat, lon]).setContent(content).openOn(map);
     }
+    const routeSelect = document.getElementById('routeSelectContainer');
+    
+    const isRouteSelectVisible = routeSelect && 
+                                 window.getComputedStyle(routeSelect).display !== 'none';
+
+    if (isRouteSelectVisible) {
+        const clickPoint = map.latLngToContainerPoint([lat, lon]);
+        
+        
+        if (clickPoint.y < 340) {
+            
+            const offset = 340 - clickPoint.y;
+            
+            requestAnimationFrame(() => {
+                
+                map.panBy([0, -offset], { animate: true });
+            });
+        }
+    }
+    
+    
 }
 
 function startHeightTipTimer() {
@@ -2464,38 +2504,36 @@ function renderEmptyRouteSummary(currentRoute) {
 
 
 window.renderWaypointsAndPeaks = function(currentRoute, forceFS = null) {
+    
+    
     const wptListContainer = document.getElementById("wptList");
     const navShortcuts = document.getElementById("navShortcuts");
-    if (!wptListContainer) return;
-
-    let listHtml = "";
-    let shortcutsHtml = "";
+    if (!wptListContainer) {
+        console.warn("[wptList Debug] 找不到 wptList 容器，終止渲染");
+        return;
+    }
 
     const activeIdx = window.currentActiveIndex || 0;
     
     
-    
     window._cachedRoutes = window._cachedRoutes || {};
     if (currentRoute && (currentRoute.points || currentRoute.waypoints)) {
+        
         window._cachedRoutes[activeIdx] = currentRoute;
     }
     
-    
     const route = currentRoute || window._cachedRoutes[activeIdx] || (window.allTracks ? window.allTracks[activeIdx] : null);
-
     
-    if (!route || ((!route.points || route.points.length === 0) && (!route.waypoints || route.waypoints.length === 0))) {
+    if (!route) {
+        console.error("[wptList Debug] 無法獲取任何有效的 route 資料源");
         wptListContainer.innerHTML = "";
-        if (navShortcuts) {
-            navShortcuts.innerHTML = "";
-            navShortcuts.style.display = ""; 
-        }
-        wptListContainer.style.display = "none";
         return;
     }
+    
 
     const currentTrackPts = route.points || [];
     const rawWaypoints = route.waypoints || [];
+    
 
     let startTime = null; let endTime = null;
     if (currentTrackPts.length > 0) {
@@ -2506,27 +2544,61 @@ window.renderWaypointsAndPeaks = function(currentRoute, forceFS = null) {
         }
     }
 
+    
     const filteredWpts = rawWaypoints.map((w, i) => ({ ...w, originalIdx: i }))
     .filter(w => {
         if (activeIdx === 0) return true;
         if (w.belongsToRoute !== undefined) return w.belongsToRoute === activeIdx;     
+        
         const wTimeVal = w.time ? new Date(w.time).getTime() : null;
         const isNative = route.waypoints && route.waypoints.some(rawW => 
             Math.abs(rawW.lat - w.lat) < 0.0001 && Math.abs(rawW.lon - w.lon) < 0.0001 && String(rawW.name) === String(w.name)
         );
+        
         const isTrekDayPoint = wTimeVal && startTime && Math.abs(wTimeVal - startTime) < (48 * 60 * 60 * 1000);
         let isInTimeRange = (startTime && endTime && wTimeVal) ? (wTimeVal >= startTime && wTimeVal <= endTime) : false;
+
+        
+        const onTrack = currentTrackPts.some(tp => (Math.pow(w.lat - tp.lat, 2) + Math.pow(w.lon - tp.lon, 2)) < 0.00000324);
+        
         if (isNative) {     
-            if (isTrekDayPoint && !isInTimeRange) return false; 
+            if (isTrekDayPoint && !isInTimeRange) {
+                
+                return false;
+            }
             return true;
         }
-        return currentTrackPts.some(tp => (Math.pow(w.lat - tp.lat, 2) + Math.pow(w.lon - tp.lon, 2)) < 0.00000324);
+
+        const keep = onTrack;
+        if (!keep) {
+            
+        }
+        return keep;
     });
 
-    const uniqueWpts = filteredWpts.filter((v, i, a) => 
-        a.findIndex(t => t.name === v.name && t.localTime === v.localTime) === i
-    );
+    
 
+    
+    const uniqueWpts = filteredWpts.filter((v, i, a) => {
+        const matchIdx = a.findIndex(t => 
+            t.name === v.name && 
+            t.time === v.time && 
+            Math.abs(t.lat - v.lat) < 0.000001 && 
+            Math.abs(t.lon - v.lon) < 0.000001
+        );
+        
+        if (matchIdx !== i) {
+            
+        }
+        return matchIdx === i;
+    });
+
+    
+    
+
+    
+    let listHtml = "";
+    let shortcutsHtml = "";
     const isFS = (forceFS !== null) ? forceFS : !!(document.fullscreenElement || document.webkitFullscreenElement || document.body.classList.contains('iphone-fullscreen'));
 
     if (navShortcuts) navShortcuts.style.display = "flex";
@@ -2586,6 +2658,7 @@ window.renderWaypointsAndPeaks = function(currentRoute, forceFS = null) {
             if (typeof initWptDragSelect === 'function') initWptDragSelect();
         }, 150);
     }
+    
 };
 
 
@@ -4001,24 +4074,19 @@ window.handleWptEdit = function(existingIdx, lat, lon, ele, oldName, timeStr, or
 };
 
 function processSave(finalName, finalEle) {
-    const { existingIdx, lat, lon, timeStr, originalIdx, stackIdx, activeIdx } = currentEditTask;
+    const { existingIdx, lat, lon, originalIdx, stackIdx, activeIdx } = currentEditTask;
     const isEditing = (existingIdx !== null && existingIdx !== -1);
-
-    
-    const formatToStandard = (dateInput) => {
-        const d = new Date(dateInput);
-        if (isNaN(d.getTime())) return dateInput; 
-        const pad = (n) => String(n).padStart(2, '0');
-        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-    };
-    const getNowStr = () => formatToStandard(new Date());
-
-    
     const oldWptSnapshot = isEditing ? JSON.parse(JSON.stringify(multiGpxStack[stackIdx].waypoints[existingIdx])) : null;
     let addedWptRef = null;
 
-    
-    const runBehavior = (isFromUndoRedo) => {
+    const runBehavior = (isFromUndoRedo, focusPos = null) => {
+        
+        if (typeof wptMarkers !== 'undefined' && wptMarkers.length > 0) {
+            wptMarkers.forEach(m => { if (m && map.hasLayer(m)) map.removeLayer(m); });
+            wptMarkers = []; 
+        }
+        if (window.wptLayer) window.wptLayer.clearLayers();
+
         
         if (allTracks.length === 0) {
             allTracks.push(multiGpxStack[stackIdx]);
@@ -4026,71 +4094,47 @@ function processSave(finalName, finalEle) {
             allTracks.forEach(track => { track.waypoints = multiGpxStack[stackIdx].waypoints; });
         }
 
-        
         if (typeof rebuildXmlFromWaypoints === 'function') rebuildXmlFromWaypoints(multiGpxStack[stackIdx]);
         if (typeof updateWptTable === 'function') updateWptTable();
+        
+        
         if (typeof renderWaypointsAndPeaks === 'function') renderWaypointsAndPeaks(allTracks[activeIdx]);
+        if (typeof loadRoute === 'function') loadRoute(activeIdx, null, focusPos);
 
-        
-        if (typeof loadRoute === 'function') loadRoute(activeIdx);
-
-        
         if (!isFromUndoRedo) {
             setTimeout(() => {
                 if (window.isDraggingWpt) return;
-                map.eachLayer((layer) => {
-                    if (layer instanceof L.CircleMarker && !(layer instanceof L.Marker)) map.removeLayer(layer);
-                });
-                window.activeFocusCircle = L.circleMarker([lat, lon], {
-                    radius: 7, color: '#ffffff', weight: 2, fillColor: '#1a73e8', fillOpacity: 1, interactive: false 
-                }).addTo(map);
-
-                let targetIdx = parseInt(originalIdx);
-                if ((isNaN(targetIdx) || targetIdx === -1) && typeof trackPoints !== 'undefined') {
-                    let minD = Infinity;
-                    trackPoints.forEach((p, i) => {
-                        const d = Math.abs(p.lat - lat) + Math.abs(p.lon - lon);
-                        if (d < minD) { minD = d; targetIdx = i; }
-                    });
-                    if (minD > 0.0005) targetIdx = 999999;
-                }
-                showCustomPopup(targetIdx, finalName, "wpt", lat, lon);
-                if (typeof renderRouteInfo === 'function') renderRouteInfo();
+                showCustomPopup(originalIdx, finalName, "wpt", lat, lon);
             }, 350);
         }
     };
 
-    
     historyManager.execute({
         do: () => {
             if (isEditing) {
                 multiGpxStack[stackIdx].waypoints[existingIdx].name = finalName;
                 multiGpxStack[stackIdx].waypoints[existingIdx].ele = parseFloat(finalEle);
             } else {
-                addedWptRef = { 
-                    lat, lon, name: finalName, isCustom: true, belongsToRoute: activeIdx,
-                    time: new Date().toISOString(), 
-                    localTime: getNowStr(), 
-                    ele: parseFloat(finalEle) || 0
-                };
-                if (originalIdx !== null && originalIdx !== undefined && timeStr) {
-                    const formattedTime = formatToStandard(timeStr);
-                    addedWptRef.time = formattedTime;
-                    addedWptRef.localTime = formattedTime;
-                }
+                addedWptRef = { lat, lon, name: finalName, ele: parseFloat(finalEle) || 0 };
                 multiGpxStack[stackIdx].waypoints.push(addedWptRef);
             }
-            runBehavior(false);
+            runBehavior(false, { lat, lng: lon });
         },
         undo: () => {
+            let restorePos = { lat, lng: lon };
             if (isEditing) {
-                multiGpxStack[stackIdx].waypoints[existingIdx].name = oldWptSnapshot.name;
-                multiGpxStack[stackIdx].waypoints[existingIdx].ele = oldWptSnapshot.ele;
+                const targetWpt = multiGpxStack[stackIdx].waypoints[existingIdx];
+                targetWpt.name = oldWptSnapshot.name;
+                targetWpt.ele = oldWptSnapshot.ele;
+                restorePos = { lat: targetWpt.lat, lng: targetWpt.lon };
+                
+                currentEditTask.lat = targetWpt.lat;
+                currentEditTask.lon = targetWpt.lon;
             } else {
                 const idx = multiGpxStack[stackIdx].waypoints.indexOf(addedWptRef);
                 if (idx > -1) multiGpxStack[stackIdx].waypoints.splice(idx, 1);
             }
-            runBehavior(true);
+            runBehavior(true, restorePos);
         }
     });
 
@@ -4100,77 +4144,36 @@ function processSave(finalName, finalEle) {
 
 
 window.deleteWaypoint = function(idx, backToEdit = null) {
-    const modal = document.getElementById('deleteConfirmModal');
-    if (!modal) {
-        console.error("找不到 ID 為 deleteConfirmModal 的視窗");
-        return;
-    }
-
-    const pTag = modal.querySelector('p');
-    if (pTag) pTag.innerHTML = `此動作可透過復原按鈕還原。<br>您確定要刪除此航點？`;
-
-    const confirmBtn = document.getElementById('modalDeleteConfirm');
-    const cancelBtn = document.getElementById('modalDeleteCancel');
+    
+    const confirmMsg = `此動作可透過復原按鈕還原。<br>您確定要刪除此航點？`;
 
     
-    const closeModal = () => {
-        modal.style.display = 'none';
-        window.removeEventListener('keydown', handleKeydown);
-    };
-
-    
-    const handleKeydown = (e) => {
-        if (e.key === "Enter") {
-            e.preventDefault();
-            confirmBtn.click();
-        } else if (e.key === "Escape") {
-            cancelBtn.click();
-        }
-    };
-
-    
-    modal.style.display = 'flex';
-    window.addEventListener('keydown', handleKeydown);
-
-    
-    confirmBtn.onclick = function() {
-        executeDelete(idx);
-        closeModal();
-        if (typeof updateSelectedCount === 'function') updateSelectedCount();
-    };
-
-    
-    cancelBtn.onclick = function() {
-        closeModal();
-        
-        
-        if (backToEdit && typeof window.handleWptEdit === 'function') {
-            
-            const t = backToEdit.task; 
-            const d = backToEdit.data; 
-
-            
-            setTimeout(() => {
-               
-                window.handleWptEdit(
-                    t.existingIdx, 
-                    t.lat, 
-                    t.lon, 
-                    d.ele,   
-                    d.name,  
-                    t.timeStr, 
-                    t.originalIdx
-                );
-            }, 50);
-        } 
-    };
+    window.showAppConfirm(
+        "刪除航點確認", 
+        confirmMsg,    
+        function() {   
+            executeDelete(idx);
+            if (typeof updateSelectedCount === 'function') updateSelectedCount();
+        }, 
+        function() {   
+            if (backToEdit && typeof window.handleWptEdit === 'function') {
+                const t = backToEdit.task; 
+                const d = backToEdit.data; 
+                setTimeout(() => {
+                    window.handleWptEdit(
+                        t.existingIdx, t.lat, t.lon, d.ele, d.name, t.timeStr, t.originalIdx
+                    );
+                }, 50);
+            }
+        }, 
+        "確定刪除"     
+    );
 };
 
 
 function executeDelete(idx) {
     const stackIdx = (typeof window.currentMultiIndex !== 'undefined') ? window.currentMultiIndex : 0;
     const currentStackItem = multiGpxStack[stackIdx];
-
     if (!currentStackItem || !currentStackItem.waypoints) return;
 
     
@@ -4179,53 +4182,85 @@ function executeDelete(idx) {
     if (!target) return;
 
     
+    const targetPos = { lat: target.lat, lng: target.lon };
+
+    
+
     historyManager.execute({
         do: () => {
             
-            const targetName = target.name;
-            const targetLat = target.lat;
-            const targetLon = target.lon;
-
-            updateRawGpxContent(targetName, { lat: targetLat, lng: targetLon }, null, null);
-
-            currentStackItem.waypoints = currentStackItem.waypoints.filter(w => {
-                const isSame = (w.name === targetName && w.lat === targetLat && w.lon === targetLon);
-                return !isSame; 
-            });
-
-            if (typeof allTracks !== 'undefined' && Array.isArray(allTracks)) {
-                allTracks.forEach(track => {
-                    track.waypoints = currentStackItem.waypoints;
-                });
-            }
-
-            if (typeof currentPopup !== 'undefined' && currentPopup) map.closePopup();
-            map.eachLayer(layer => {
-                if (layer instanceof L.CircleMarker && layer.options.radius === 7) map.removeLayer(layer);
-            });
-
-            if (typeof renderWaypointsAndPeaks === 'function') {
-                renderWaypointsAndPeaks(allTracks[window.currentActiveIndex || 0]);
-            }
-
-            if (typeof loadRoute === 'function') {
-                loadRoute(window.currentActiveIndex || 0); 
-            }
             
+            
+            currentStackItem.waypoints = currentStackItem.waypoints.filter(w => {
+                return !(w.name === target.name && w.lat === target.lat && w.lon === target.lon);
+            });
+
+            if (typeof allTracks !== 'undefined') {
+                allTracks.forEach(track => { track.waypoints = currentStackItem.waypoints; });
+            }
+
+            
+            refreshUI();
         },
         undo: () => {
-            
-            currentStackItem.waypoints = oldWpts;
-            if (allTracks) allTracks.forEach(track => { track.waypoints = oldWpts; });
-            
-            if (typeof renderWaypointsAndPeaks === 'function') {
-                renderWaypointsAndPeaks(allTracks[window.currentActiveIndex || 0]);
-            }
-            if (typeof loadRoute === 'function') {
-                loadRoute(window.currentActiveIndex || 0);
-            }
-        }
+			    
+			    
+			    
+			    const restoredWpts = JSON.parse(JSON.stringify(oldWpts));
+			    currentStackItem.waypoints = restoredWpts;
+			    
+			    
+			    if (typeof allTracks !== 'undefined') {
+			        allTracks.forEach(track => { 
+			            track.waypoints = restoredWpts; 
+			        });
+			    }
+			
+			    
+			    if (typeof wptMarkers !== 'undefined') {
+			        wptMarkers.forEach(m => { if (m && map.hasLayer(m)) map.removeLayer(m); });
+			        wptMarkers = [];
+			    }
+			
+			    
+			    refreshUI({ lat: target.lat, lng: target.lon });
+			}
     });
+
+					function refreshUI(focusPos = null) {
+					    const activeIdx = window.currentActiveIndex || 0;
+					    const stackIdx = (typeof window.currentMultiIndex !== 'undefined') ? window.currentMultiIndex : 0;
+					    
+					    
+					    if (typeof wptMarkers !== 'undefined') {
+					        wptMarkers.forEach(m => { if (m && map.hasLayer(m)) map.removeLayer(m); });
+					        wptMarkers = []; 
+					    }
+					    if (window.wptLayer) window.wptLayer.clearLayers();
+					
+					    
+					    if (window.multiGpxStack && window.multiGpxStack[stackIdx]) {
+					        
+					        if (typeof allTracks !== 'undefined') {
+					            allTracks[activeIdx].waypoints = window.multiGpxStack[stackIdx].waypoints;
+					        }
+					    }
+					
+					    
+					    if (typeof loadRoute === 'function') {
+					        loadRoute(activeIdx, null, focusPos); 
+					    }
+					
+					    
+					    
+					    if (typeof renderWaypointsAndPeaks === 'function') {
+					        renderWaypointsAndPeaks(allTracks[activeIdx]);
+					    }
+					    
+					    if (typeof updateWptTable === 'function') {
+					        updateWptTable(); 
+					    }
+					}
 }
 
 
@@ -5108,28 +5143,14 @@ class HistoryManager {
         this.undoStack = [];
         this.redoStack = [];
     }
-    
-		 clear() {
-	    this.undoStack = [];
-	    this.redoStack = [];
-	
-	    
-	    if (window.activeFocusCircle && map.hasLayer(window.activeFocusCircle)) {
-	        map.removeLayer(window.activeFocusCircle);
-	        window.activeFocusCircle = null;
-	    }
-	
-	    
-	    map.eachLayer(layer => {
-	        if (layer instanceof L.CircleMarker && layer.options.radius === 7) {
-	            map.removeLayer(layer);
-	        }
-	    });
-	
-	    this.updateUI(); 
-	}
 
-    
+    clear() {
+        this.undoStack = [];
+        this.redoStack = [];
+        this.clearMapMarkers();
+        this.updateUI();
+    }
+
     getBtnState(type) {
         const hasItems = type === 'undo' ? this.undoStack.length > 0 : this.redoStack.length > 0;
         return {
@@ -5149,29 +5170,48 @@ class HistoryManager {
 
     undo() {
         if (this.undoStack.length === 0) return;
+        
+        this.clearMapMarkers(); 
         const command = this.undoStack.pop();
         command.undo();
         this.redoStack.push(command);
         this.updateUI();
+        
     }
 
     redo() {
         if (this.redoStack.length === 0) return;
+        this.clearMapMarkers();
         const command = this.redoStack.pop();
         command.do();
         this.undoStack.push(command);
         this.updateUI();
     }
 
-    updateUI() {
-        if (typeof historyManager !== 'undefined') {
-            const u = this.getBtnState('undo');
-            const r = this.getBtnState('redo');
-            const ub = document.getElementById('undoBtn');
-            const rb = document.getElementById('redoBtn');
-            if (ub) { ub.style.color = u.color; ub.style.opacity = u.opacity; ub.disabled = !!u.disabled; }
-            if (rb) { rb.style.color = r.color; rb.style.opacity = r.opacity; rb.disabled = !!r.disabled; }
+    clearMapMarkers() {
+        if (typeof map === 'undefined') return;
+        let count = 0;
+        if (window.activeFocusCircle && map.hasLayer(window.activeFocusCircle)) {
+            map.removeLayer(window.activeFocusCircle);
+            window.activeFocusCircle = null;
         }
+        map.eachLayer(layer => {
+            if (layer instanceof L.CircleMarker && layer.options.radius === 7) {
+                map.removeLayer(layer);
+                count++;
+            }
+        });
+        if (window.wptLayer) window.wptLayer.clearLayers();
+        
+    }
+
+    updateUI() {
+        const u = this.getBtnState('undo');
+        const r = this.getBtnState('redo');
+        const ub = document.getElementById('undoBtn');
+        const rb = document.getElementById('redoBtn');
+        if (ub) { ub.style.color = u.color; ub.style.opacity = u.opacity; ub.disabled = !!u.disabled; }
+        if (rb) { rb.style.color = r.color; rb.style.opacity = r.opacity; rb.disabled = !!r.disabled; }
     }
 }
 
@@ -5214,58 +5254,78 @@ window.restoreAndJump = async function(targetId) {
     }
 };
 
+
+
+if (typeof window.routeSelectOriginalParent === 'undefined') {
+    window.routeSelectOriginalParent = document.getElementById('routeSelectContainer').parentElement;
+}
+
 document.addEventListener('fullscreenchange', () => {
     const mapContainer = document.getElementById('map');
     const navShortcuts = document.getElementById('navShortcuts');
+    const routeSelectContainer = document.getElementById('routeSelectContainer');
     
-    const modals = [
-        document.getElementById('wptEditModal'),
-        document.getElementById('deleteConfirmModal'),
-        document.getElementById('renameModal'),
-        document.getElementById('coordModal')
-    ];
+    const isNowFS = !!(document.fullscreenElement || document.webkitFullscreenElement || document.body.classList.contains('iphone-fullscreen'));
 
     
-    const isNowFS = !!document.fullscreenElement;
+    
 
     if (isNowFS) {
         
         if (navShortcuts) mapContainer.appendChild(navShortcuts);
-        modals.forEach(modal => { if (modal) mapContainer.appendChild(modal); });
-        modals.forEach(modal => { if (modal) L.DomEvent.disableClickPropagation(modal); });
+        
+        if (routeSelectContainer) {
+            
+            if (!window.routeSelectOriginalParent || window.routeSelectOriginalParent.id === 'map') {
+                window.routeSelectOriginalParent = document.querySelector('.subtitle div') || document.getElementById('header');
+            }
+
+            mapContainer.appendChild(routeSelectContainer);
+            L.DomEvent.disableClickPropagation(routeSelectContainer);
+
+            
+            const tracksCount = (window.allTracks) ? window.allTracks.length : 0;
+            const stackCount = (window.multiGpxStack) ? window.multiGpxStack.length : 0;
+            const hasMultiple = tracksCount > 1 || stackCount > 1;
+
+            
+
+            if (hasMultiple) {
+                routeSelectContainer.style.cssText = `
+                    display: block !important;
+                    position: absolute !important;
+                    top: 15px !important;
+                    left: 50% !important;
+                    transform: translateX(-50%) !important;
+                    z-index: 2147483647 !important;
+                    background: #1a73e8 !important;
+                `;
+                if (navShortcuts) navShortcuts.style.setProperty('top', '65px', 'important');
+                
+            } else {
+                routeSelectContainer.style.cssText = `display: none !important;`;
+                if (navShortcuts) navShortcuts.style.setProperty('top', '30px', 'important');
+                
+            }
+        }
     } else {
         
-        const body = document.body;
-        const subtitleArea = document.querySelector('.subtitle div');
-        
-        if (navShortcuts && subtitleArea) {
-            subtitleArea.prepend(navShortcuts);
-            
-            
-            
-            const buttons = navShortcuts.querySelectorAll('.shortcut-btn');
-            buttons.forEach(btn => {
-                btn.style.display = ''; 
-            });
+        if (navShortcuts) {
+            const subtitleArea = document.querySelector('.subtitle div');
+            if (subtitleArea) subtitleArea.prepend(navShortcuts);
+            navShortcuts.style.cssText = ""; 
+            navShortcuts.style.display = 'flex';
         }
         
-        modals.forEach(modal => { if (modal) body.appendChild(modal); });
+        if (routeSelectContainer && window.routeSelectOriginalParent) {
+            window.routeSelectOriginalParent.appendChild(routeSelectContainer);
+            routeSelectContainer.style.cssText = ""; 
+            
+            const finalCount = (window.allTracks ? window.allTracks.length : 0);
+            routeSelectContainer.style.display = (finalCount > 1) ? 'block' : 'none';
+            
+        }
     }
-
-    
-    
-    const activeIdx = window.currentActiveIndex || 0;
-    const currentRoute = (window.allTracks && window.allTracks[activeIdx]) ? window.allTracks[activeIdx] : null;
-    
-    if (typeof renderWaypointsAndPeaks === 'function') {
-        
-        
-        renderWaypointsAndPeaks(currentRoute, isNowFS);
-    }
-
-    setTimeout(() => {
-        if (typeof setupProgressBar === 'function') setupProgressBar();
-    }, 150);
 });
 
 const navBar = document.getElementById('navShortcuts');
@@ -5280,21 +5340,18 @@ if (navBar) {
     L.DomEvent.on(navBar, 'dblclick', L.DomEvent.stopPropagation);
 }
 
-window.showAppConfirm = function(title, message, onConfirm, onCancel) {
+window.showAppConfirm = function(title, message, onConfirm, onCancel, btnText = "確定") {
     const modal = document.getElementById('deleteConfirmModal');
     if (!modal) return;
 
-    
     const h3Tag = modal.querySelector('h3');
     if (h3Tag) h3Tag.innerText = title;
 
-    
     const pTag = modal.querySelector('p');
     if (pTag) pTag.innerHTML = message;
 
-    
     const confirmBtn = document.getElementById('modalDeleteConfirm');
-    if (confirmBtn) confirmBtn.innerText = "確定移動";
+    if (confirmBtn) confirmBtn.innerText = btnText; 
 
     modal.style.display = 'flex';
     L.DomEvent.disableClickPropagation(modal);
@@ -5312,45 +5369,151 @@ window.showAppConfirm = function(title, message, onConfirm, onCancel) {
 
 let _lastFSState = null; 
 
+
+let routeSelectOriginalParent = null;
+
 function handleFullscreenStateChange() {
-    const mapContainer = document.getElementById('map');
-    const navShortcuts = document.getElementById('navShortcuts');
     
-    const modals = [
-        document.getElementById('wptEditModal'),
-        document.getElementById('deleteConfirmModal'),
-        document.getElementById('renameModal'),
-        document.getElementById('coordModal')
-    ];
-
-    const isNowFS = !!(document.fullscreenElement || document.webkitFullscreenElement || document.body.classList.contains('iphone-fullscreen'));
-
-    
-    if (_lastFSState === isNowFS) return;
-    _lastFSState = isNowFS;
-
-    if (isNowFS) {
-        if (navShortcuts) mapContainer.appendChild(navShortcuts);
-        modals.forEach(modal => { if (modal) mapContainer.appendChild(modal); });
-        modals.forEach(modal => { if (modal) L.DomEvent.disableClickPropagation(modal); });
-    } else {
-        const body = document.body;
-        const subtitleArea = document.querySelector('.subtitle div');
-        if (navShortcuts && subtitleArea) {
-            subtitleArea.prepend(navShortcuts);
-            navShortcuts.style.display = ''; 
-        }
-        modals.forEach(modal => { if (modal) body.appendChild(modal); });
-    }
-
-    
-    if (typeof renderWaypointsAndPeaks === 'function') {
-        renderWaypointsAndPeaks(null, isNowFS);
-    }
-
     setTimeout(() => {
-        if (typeof setupProgressBar === 'function') setupProgressBar();
-    }, 150);
+        const mapContainer = document.getElementById('map');
+        const navShortcuts = document.getElementById('navShortcuts');
+        const routeSelectContainer = document.getElementById('routeSelectContainer');
+        
+        const modals = [
+            document.getElementById('wptEditModal'),
+            document.getElementById('deleteConfirmModal'),
+            document.getElementById('renameModal'),
+            document.getElementById('coordModal')
+        ];
+
+        
+        const isNowFS = !!(
+            document.fullscreenElement || 
+            document.webkitFullscreenElement || 
+            document.body.classList.contains('iphone-fullscreen')
+        );
+
+        
+        
+
+        if (isNowFS) {
+            
+            
+
+            if (navShortcuts) {
+                mapContainer.appendChild(navShortcuts);
+                navShortcuts.style.setProperty('z-index', '2147483640', 'important');
+            }
+
+            if (routeSelectContainer) {
+                
+                if (!window.routeSelectOriginalParent || window.routeSelectOriginalParent.id === 'map') {
+                    window.routeSelectOriginalParent = routeSelectContainer.parentElement;
+                }
+                
+                mapContainer.appendChild(routeSelectContainer);
+                L.DomEvent.disableClickPropagation(routeSelectContainer);
+
+                const tracksCount = (window.allTracks) ? window.allTracks.length : 0;
+                const stackCount = (window.multiGpxStack) ? window.multiGpxStack.length : 0;
+                
+                
+                if (tracksCount > 1 || stackCount > 1) {
+                    routeSelectContainer.style.cssText = `
+                        display: block !important;
+                        position: absolute !important;
+                        top: 15px !important;
+                        left: 50% !important;
+                        transform: translateX(-50%) !important;
+                        z-index: 2147483645 !important;
+                        background: #1a73e8 !important;
+                        padding: 4px 15px !important;
+                        border-radius: 25px !important;
+                    `;
+                    if (navShortcuts) navShortcuts.style.setProperty('top', '65px', 'important');
+                } else {
+                    routeSelectContainer.style.setProperty('display', 'none', 'important');
+                    if (navShortcuts) navShortcuts.style.setProperty('top', '30px', 'important');
+                }
+            }
+
+            modals.forEach(modal => { 
+                if (modal) {
+                    mapContainer.appendChild(modal);
+                    modal.style.setProperty('z-index', '2147483647', 'important');
+
+                    
+                    L.DomEvent.disableClickPropagation(modal);
+                    L.DomEvent.on(modal, 'click dblclick mousedown touchstart', L.DomEvent.stopPropagation);
+
+                    
+                    if (!modal._fsObserver) {
+                        modal._fsObserver = new MutationObserver(() => {
+                            const isOpen = modal.style.display === 'flex' || modal.style.display === 'block';
+                            if (window.map) {
+                                if (isOpen) {
+                                    window.map.dragging.disable();
+                                    window.map.scrollWheelZoom.disable();
+                                    window.map.doubleClickZoom.disable();
+                                    if (navShortcuts) navShortcuts.classList.add('navShortcuts-locked');
+                                } else {
+                                    window.map.dragging.enable();
+                                    window.map.scrollWheelZoom.enable();
+                                    window.map.doubleClickZoom.enable();
+                                    if (navShortcuts) navShortcuts.classList.remove('navShortcuts-locked');
+                                }
+                            }
+                        });
+                        modal._fsObserver.observe(modal, { attributes: true, attributeFilter: ['style'] });
+                    }
+                }
+            });
+
+        } else {
+            
+            if (navShortcuts && navShortcuts.parentElement === mapContainer) {
+                
+                const subtitleArea = document.querySelector('.subtitle div');
+                if (subtitleArea) subtitleArea.prepend(navShortcuts);
+                navShortcuts.style.cssText = "";
+                navShortcuts.style.display = 'flex';
+
+                if (routeSelectContainer && window.routeSelectOriginalParent) {
+                    window.routeSelectOriginalParent.appendChild(routeSelectContainer);
+                    routeSelectContainer.style.cssText = "";
+                    const total = (window.allTracks ? window.allTracks.length : 0);
+                    routeSelectContainer.style.display = (total > 1) ? 'block' : 'none';
+                }
+
+                modals.forEach(modal => { 
+                    if (modal) {
+                        document.body.appendChild(modal);
+                        modal.style.removeProperty('z-index');
+                        
+                        
+                        if (modal._fsObserver) {
+                            modal._fsObserver.disconnect();
+                            delete modal._fsObserver;
+                        }
+                        if (window.map) {
+                            window.map.dragging.enable();
+                            window.map.scrollWheelZoom.enable();
+                            window.map.doubleClickZoom.enable();
+                        }
+                        if (navShortcuts) navShortcuts.classList.remove('navShortcuts-locked');
+                    }
+                });
+            } else {
+                
+            }
+        }
+
+        if (typeof renderWaypointsAndPeaks === 'function') {
+            renderWaypointsAndPeaks(null, isNowFS);
+        }
+        
+        _lastFSState = isNowFS;
+    }, 150); 
 }
 
 
