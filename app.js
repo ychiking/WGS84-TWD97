@@ -5394,125 +5394,94 @@ function handleFullscreenStateChange() {
         );
 
         
-        
+        if (routeSelectContainer) {
+            
+            mapContainer.appendChild(routeSelectContainer);
+            L.DomEvent.disableClickPropagation(routeSelectContainer);
+
+            const total = (window.allTracks ? window.allTracks.length : 0);
+            const stackTotal = (window.multiGpxStack ? window.multiGpxStack.length : 0);
+
+            if (total > 1 || stackTotal > 1) {
+                
+                routeSelectContainer.style.cssText = `
+                    display: block !important;
+                    position: absolute !important;
+                    top: 15px !important;
+                    left: 50% !important;
+                    transform: translateX(-50%) !important;
+                    z-index: 2147483645 !important;
+                    background: #1a73e8 !important; /* 統一使用藍色背景，增加辨識度 */
+                    padding: 4px 15px !important;
+                    border-radius: 25px !important;
+                    color: white !important;
+                    width: auto !important;
+                    border: 1px solid rgba(255,255,255,0.3) !important;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.3) !important;
+                `;
+                
+                const selectEl = routeSelectContainer.querySelector('select');
+                if (selectEl) {
+                    selectEl.style.background = "transparent";
+                    selectEl.style.color = "white";
+                    selectEl.style.border = "none";
+                }
+                
+                
+                if (navShortcuts) {
+                    navShortcuts.style.setProperty('top', '65px', 'important');
+                }
+            } else {
+                routeSelectContainer.style.setProperty('display', 'none', 'important');
+                if (navShortcuts) navShortcuts.style.setProperty('top', '30px', 'important');
+            }
+        }
 
         if (isNowFS) {
             
-            
-
             if (navShortcuts) {
                 mapContainer.appendChild(navShortcuts);
                 navShortcuts.style.setProperty('z-index', '2147483640', 'important');
             }
-
-            if (routeSelectContainer) {
-                
-                if (!window.routeSelectOriginalParent || window.routeSelectOriginalParent.id === 'map') {
-                    window.routeSelectOriginalParent = routeSelectContainer.parentElement;
-                }
-                
-                mapContainer.appendChild(routeSelectContainer);
-                L.DomEvent.disableClickPropagation(routeSelectContainer);
-
-                const tracksCount = (window.allTracks) ? window.allTracks.length : 0;
-                const stackCount = (window.multiGpxStack) ? window.multiGpxStack.length : 0;
-                
-                
-                if (tracksCount > 1 || stackCount > 1) {
-                    routeSelectContainer.style.cssText = `
-                        display: block !important;
-                        position: absolute !important;
-                        top: 15px !important;
-                        left: 50% !important;
-                        transform: translateX(-50%) !important;
-                        z-index: 2147483645 !important;
-                        background: #1a73e8 !important;
-                        padding: 4px 15px !important;
-                        border-radius: 25px !important;
-                    `;
-                    if (navShortcuts) navShortcuts.style.setProperty('top', '65px', 'important');
-                } else {
-                    routeSelectContainer.style.setProperty('display', 'none', 'important');
-                    if (navShortcuts) navShortcuts.style.setProperty('top', '30px', 'important');
-                }
-            }
-
+            
+            
             modals.forEach(modal => { 
                 if (modal) {
                     mapContainer.appendChild(modal);
                     modal.style.setProperty('z-index', '2147483647', 'important');
-
-                    
                     L.DomEvent.disableClickPropagation(modal);
-                    L.DomEvent.on(modal, 'click dblclick mousedown touchstart', L.DomEvent.stopPropagation);
-
-                    
-                    if (!modal._fsObserver) {
-                        modal._fsObserver = new MutationObserver(() => {
-                            const isOpen = modal.style.display === 'flex' || modal.style.display === 'block';
-                            if (window.map) {
-                                if (isOpen) {
-                                    window.map.dragging.disable();
-                                    window.map.scrollWheelZoom.disable();
-                                    window.map.doubleClickZoom.disable();
-                                    if (navShortcuts) navShortcuts.classList.add('navShortcuts-locked');
-                                } else {
-                                    window.map.dragging.enable();
-                                    window.map.scrollWheelZoom.enable();
-                                    window.map.doubleClickZoom.enable();
-                                    if (navShortcuts) navShortcuts.classList.remove('navShortcuts-locked');
-                                }
-                            }
-                        });
-                        modal._fsObserver.observe(modal, { attributes: true, attributeFilter: ['style'] });
-                    }
                 }
             });
-
         } else {
             
-            if (navShortcuts && navShortcuts.parentElement === mapContainer) {
-                
+            if (navShortcuts) {
                 const subtitleArea = document.querySelector('.subtitle div');
                 if (subtitleArea) subtitleArea.prepend(navShortcuts);
                 navShortcuts.style.cssText = "";
                 navShortcuts.style.display = 'flex';
+            }
 
-                if (routeSelectContainer && window.routeSelectOriginalParent) {
-                    window.routeSelectOriginalParent.appendChild(routeSelectContainer);
-                    routeSelectContainer.style.cssText = "";
-                    const total = (window.allTracks ? window.allTracks.length : 0);
-                    routeSelectContainer.style.display = (total > 1) ? 'block' : 'none';
-                }
-
-                modals.forEach(modal => { 
-                    if (modal) {
-                        document.body.appendChild(modal);
-                        modal.style.removeProperty('z-index');
-                        
-                        
-                        if (modal._fsObserver) {
-                            modal._fsObserver.disconnect();
-                            delete modal._fsObserver;
-                        }
-                        if (window.map) {
-                            window.map.dragging.enable();
-                            window.map.scrollWheelZoom.enable();
-                            window.map.doubleClickZoom.enable();
-                        }
-                        if (navShortcuts) navShortcuts.classList.remove('navShortcuts-locked');
+            modals.forEach(modal => { 
+                if (modal) {
+                    document.body.appendChild(modal);
+                    modal.style.removeProperty('z-index');
+                    if (modal._fsObserver) {
+                        modal._fsObserver.disconnect();
+                        delete modal._fsObserver;
                     }
-                });
-            } else {
-                
+                }
+            });
+
+            if (window.map) {
+                window.map.dragging.enable();
+                window.map.scrollWheelZoom.enable();
+                window.map.doubleClickZoom.enable();
             }
         }
 
         if (typeof renderWaypointsAndPeaks === 'function') {
             renderWaypointsAndPeaks(null, isNowFS);
         }
-        
-        _lastFSState = isNowFS;
     }, 150); 
 }
 
