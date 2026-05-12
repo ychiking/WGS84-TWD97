@@ -713,27 +713,6 @@
     user-select: none;
 }
 
-.undo-redo-btn {
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 50%;
-    width: 30px;
-    height: 30px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    margin: 0 4px;
-    transition: all 0.2s;
-    color: #5f6368;
-}
-
-.undo-redo-btn:hover:not([style*="opacity: 0.3"]) {
-    background: #f1f3f4;
-    border-color: #1a73e8;
-    color: #1a73e8;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
-}
 
 #map:fullscreen #navShortcuts::before,
 .iphone-fullscreen #navShortcuts::before,
@@ -786,41 +765,19 @@
     box-shadow: none !important;
 }
 
-#map:fullscreen #navShortcuts:empty,
-.iphone-fullscreen #navShortcuts:empty {
-    display: none !important;
-}
-
-#map:fullscreen #navShortcuts,
-.iphone-fullscreen #navShortcuts {
-    display: flex !important;
-    position: absolute !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    z-index: 2147483647 !important;
-    
-    background: none !important;
-    box-shadow: none !important;
-    border: none !important;
-    padding: 0 !important;
-    
-    width: auto !important;
-    gap: 10px !important;
-    transition: top 0.3s ease; 
-}
 
 #routeSelectContainer {
     display: none;
     position: absolute !important;
     top: 15px !important;
-    left: 50% !important;
+    left: 10% !important;
     transform: translateX(-50%) !important;
     z-index: 10001 !important;
     
-    background: #1a73e8 !important; 
+    background: white !important; 
     padding: 4px 12px !important;
     border-radius: 20px !important;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.3) !important;
     border: 1px solid rgba(255,255,255,0.2) !important;
     white-space: nowrap !important;
 }
@@ -828,9 +785,8 @@
 #routeSelect {
     border: none !important;
     background: transparent !important;
-    color: white !important;       
+    color: #000000 !important;       
     font-size: 14px !important;
-    font-weight: bold !important;
     outline: none !important;
     cursor: pointer;
     width: 240px;
@@ -874,12 +830,65 @@
     font-size: 24px !important;    
 }
 
+#gpxManageModal, 
+#searchModal, 
+#wptEditModal, 
+#deleteConfirmModal, 
+#renameModal, 
+#coordModal {
+    z-index: 2147483647 !important;
+}
+
+/* 針對全螢幕狀態的統一鎖定 */
+:fullscreen ~ .modal-class, /* 如果你的 Modal 有共同的 class */
+#map:fullscreen .modal-class,
+:fullscreen ~ [id$="Modal"], /* 或者選取所有 ID 結尾是 Modal 的元素 */
+#map:fullscreen [id$="Modal"],
+.iphone-fullscreen [id$="Modal"] {
+    z-index: 2147483647 !important;
+    position: absolute; /* 確保全螢幕下定位不跑掉 */
+}
+
+.map-side-bar {
+    position: absolute;
+    right: 15px;
+    top: 240px;
+    transform: translateY(-50%);
+    z-index: 1000; 
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.side-tool-btn {
+    width: 35px;
+    height: 35px;
+    background: white;
+    border-radius: 50%;
+    border: 1px solid rgba(0,0,0,0.1);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 0;
+}
+
+.side-tool-btn:hover {
+    box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+    filter: brightness(0.95);
+}
+
+.side-tool-btn .material-icons {
+    font-size: 22px;
+}
   </style>
 </head>
 
 <body>
   <div id="header">
-    <strong style="font-size: 12px; color: #333;">YCHiking-GPX 路線檢視工具 v2605102</strong>
+    <strong style="font-size: 12px; color: #333;">YCHiking-GPX 路線檢視工具 v2605121</strong>
     <div class="upload-row">
       <input type="file" id="gpxInput" accept=".gpx" style="display: none;" />
       <input type="file" id="multiGpxInput" accept=".gpx" multiple style="display: none;" />
@@ -905,13 +914,14 @@
           </button>
         </div>
         <div id="routeSelectContainer" style="display: none; margin-top: 0;">
-          <select id="routeSelect" style="height: 28px; padding: 0 10px; border-radius: 16px; border: 1px solid #ccc; box-sizing: border-box;"></select>
+          <select id="routeSelect" style="height: 20px; padding: 0 10px; border-radius: 16px; border: 1px solid #ccc; box-sizing: border-box;"></select>
         </div>
       </div>
     </div>
   </div>
 
   <div id="map">
+  	<div id="side-toolbar" class="map-side-bar"></div>
     <div id="multiGpxBtnBar" class="multi-gpx-bar" style="display: none;"></div>
     <div id="mapCompass" class="map-compass">
       <svg width="100%" height="100%" viewBox="-10 -10 160 160">

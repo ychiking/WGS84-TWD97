@@ -104,6 +104,7 @@ const backgroundTracksLayer = L.layerGroup().addTo(map);
 const routeSelect = document.getElementById("routeSelect");
 
 let clickTimeout = null;
+	
 
 map.on('click', (e) => {
     
@@ -958,7 +959,9 @@ function initProgressBar() {
 
 
 function loadRoute(index, customColor = null, focusPos = null) {
+    renderSideToolbar()
     window.currentActiveIndex = index;
+    setTimeout(() => historyManager.updateUI(), 10);
     
     
     map.eachLayer(layer => {
@@ -1217,14 +1220,19 @@ function loadRoute(index, customColor = null, focusPos = null) {
 				    let wasOnPath = (initialTIdx !== null);
 				
 				    const isAlways = typeof showWptNameAlways !== 'undefined' && showWptNameAlways;
-				    const shouldOpen = isAlways || isFocusTarget;
-				
 				    wm.bindTooltip(w.name, { 
-				        permanent: shouldOpen, direction: shouldOpen ? 'right' : 'top', 
-				        offset: shouldOpen ? [10, 0] : [0, -10],
-				        className: shouldOpen ? 'wpt-label-label' : ''
-				    });
-				    if (shouldOpen) wm.openTooltip();
+						    permanent: isAlways,           // 只有開啟「顯示名稱」時才永久顯示
+						    direction: isAlways ? 'right' : 'top', 
+						    offset: isAlways ? [10, 0] : [0, -10],
+						    className: isAlways ? 'wpt-label-label' : ''
+						});
+						
+						// 2. 初始狀態控制
+						if (isAlways) {
+						    wm.openTooltip();
+						} else {
+						    wm.closeTooltip(); // 確保預設是不顯示的
+						}
 				
 				    wm.on('dragend', function(event) {
 				        const marker = event.target;
@@ -1386,7 +1394,7 @@ function toggleWptNames() {
             return btn;
         };
 
-        const coordBtn = createBtn('🌐', '座標轉換', true);
+        const coordBtn = createBtn('🌐', '搜尋座標位置', true);
 
         const btnSize = "30px";
         const arrowIconSize = "20px";
@@ -1454,17 +1462,18 @@ function toggleWptNames() {
             modal.innerHTML = `
                 <div id="jump-container" style="background:white; padding:12px 15px; border-radius:12px; width:280px; box-shadow:0 10px 25px rgba(0,0,0,0.5); font-family: sans-serif; font-size:13px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                        <b style="color:#1a73e8;">🌐 座標跳轉定位</b>
+                        <b style="color:#1a73e8; font-size: 18px;">🌐 搜尋座標位置</b>
                         <span id="closeCoordBtn" style="cursor:pointer; font-size:20px; color:#999;">×</span>
                     </div>
 
                     <div style="border:1px solid #eee; padding:8px; border-radius:8px; margin-bottom:10px;">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                             <label style="font-weight:bold;">WGS84 (GPS)</label>
-                            <select id="wgs_type" onchange="toggleWgsInput()" style="font-size:11px; padding:2px;">
-                                <option value="DD">十進位度</option>
-                                <option value="DMS">度分秒</option>
-                            </select>
+                            <select id="wgs_type" onchange="toggleWgsInput()" 
+														    style="font-size: 11px; padding: 3px 12px; border-radius: 20px; border: 1px solid #ccc; background: #f9f9f9; cursor: pointer; outline: none;">
+														    <option value="DD">十進位度</option>
+														    <option value="DMS">度分秒</option>
+														</select>
                         </div>
 
                         <div id="wgs_dd_input" style="display:flex; gap:5px;">
@@ -1644,7 +1653,6 @@ window.toggleGPS = function(btn) {
             }
 
         }, (err) => {
-            console.warn("定位失敗:", err);
             if (isFirstTime) alert("無法獲取位置，請確認 GPS 已開啟");
         }, { enableHighAccuracy: true });
     };
@@ -2509,7 +2517,6 @@ window.renderWaypointsAndPeaks = function(currentRoute, forceFS = null) {
     const wptListContainer = document.getElementById("wptList");
     const navShortcuts = document.getElementById("navShortcuts");
     if (!wptListContainer) {
-        console.warn("[wptList Debug] 找不到 wptList 容器，終止渲染");
         return;
     }
 
@@ -2525,8 +2532,7 @@ window.renderWaypointsAndPeaks = function(currentRoute, forceFS = null) {
     const route = currentRoute || window._cachedRoutes[activeIdx] || (window.allTracks ? window.allTracks[activeIdx] : null);
     
     if (!route) {
-        console.error("[wptList Debug] 無法獲取任何有效的 route 資料源");
-        wptListContainer.innerHTML = "";
+          wptListContainer.innerHTML = "";
         return;
     }
     
@@ -2604,28 +2610,21 @@ window.renderWaypointsAndPeaks = function(currentRoute, forceFS = null) {
     if (navShortcuts) navShortcuts.style.display = "flex";
 
     const icon = (typeof showWptNameAlways !== 'undefined' && showWptNameAlways) ? "visibility_off" : "visibility";
-    shortcutsHtml += `<button type="button" class="shortcut-btn" onmousedown="L.DomEvent.stopPropagation(event)" onclick="toggleWptNames(); L.DomEvent.stopPropagation(event);" style="display:inline-flex; align-items:center;">
-        <span class="material-icons" style="font-size:18px; margin-right:4px;">${icon}</span>
-        <span>航點名稱</span>
-    </button>`;
+    
 
     if (!isFS) {
         if (uniqueWpts.length > 0) {
-            shortcutsHtml += `<button type="button" class="shortcut-btn" onmousedown="L.DomEvent.stopPropagation(event)" onclick="window.restoreAndJump('anchorWpt'); L.DomEvent.stopPropagation(event);">航點列表</button>`;
+            shortcutsHtml += `<button type="button" class="shortcut-btn" onmousedown="L.DomEvent.stopPropagation(event)" onclick="window.restoreAndJump('anchorWpt'); L.DomEvent.stopPropagation(event);">📍 航點列表</button>`;
         }
-        shortcutsHtml += `<button type="button" class="shortcut-btn" onmousedown="L.DomEvent.stopPropagation(event)" onclick="window.restoreAndJump('anchorPeak'); L.DomEvent.stopPropagation(event);">沿途山岳</button>`;
+        shortcutsHtml += `<button type="button" class="shortcut-btn" onmousedown="L.DomEvent.stopPropagation(event)" onclick="window.restoreAndJump('anchorPeak'); L.DomEvent.stopPropagation(event);">⛰️ 沿途山岳</button>`;
     }
 
     const u = historyManager.getBtnState('undo');
     const r = historyManager.getBtnState('redo');
-    shortcutsHtml += `
-    <span id="undoRedoGroup" onmousedown="L.DomEvent.stopPropagation(event)" style="margin-left: 0px; border-left: 1px solid #eee; padding-left: 10px; display: inline-flex; align-items: center; gap: 6px; vertical-align: middle;">
-        <button id="undoBtn" type="button" class="shortcut-btn" onmousedown="L.DomEvent.stopPropagation(event)" onclick="historyManager.undo(); L.DomEvent.stopPropagation(event);" title="復原" ${u.disabled} style="width: 35px; height: 26px; border-radius: 13px; display: flex; align-items: center; justify-content: center; padding: 0; background: #f8f9fa; border: 1px solid #eee; color: ${u.color}; opacity: ${u.opacity}; cursor: ${u.cursor}; transition: all 0.2s;"><span class="material-icons" style="font-size: 18px;">undo</span></button>
-        <button id="redoBtn" type="button" class="shortcut-btn" onmousedown="L.DomEvent.stopPropagation(event)" onclick="historyManager.redo(); L.DomEvent.stopPropagation(event);" title="重做" ${r.disabled} style="width: 35px; height: 26px; border-radius: 13px; display: flex; align-items: center; justify-content: center; padding: 0; background: #f8f9fa; border: 1px solid #eee; color: ${r.color}; opacity: ${r.opacity}; cursor: ${r.cursor}; transition: all 0.2s;"><span class="material-icons" style="font-size: 18px;">redo</span></button>
-    </span>`;
+
 
     if (uniqueWpts.length > 0) {
-        listHtml += `<h4 id="anchorWpt" style="margin: 20px 0 10px 0;">📍 航點列表 (${uniqueWpts.length})</h4>
+        listHtml += `<h4 id="anchorWpt" style="margin: 20px 0 10px 0;">📍 航航點點列表 (${uniqueWpts.length})</h4>
             <div class="wpt-table-toolbar" style="margin-bottom: 10px; display: flex; gap: 10px; align-items: center;">
                 <button type="button" onclick="deleteSelectedWaypoints()" class="btn-delete-multi" style="background: #d32f2f; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; font-size: 13px;"><span class="material-icons" style="font-size: 18px; margin-right: 5px;">delete_sweep</span> 刪除勾選項目</button>
                 <span id="selectedCount" style="font-size: 12px; color: #666;">已選取 0 項</span>
@@ -2865,7 +2864,8 @@ async function analyzeBestPath(latA, lonA, latB, lonB) {
 
 
     } catch (error) {
-        console.error("OSM 資料請求失敗:", error);
+
+
     }
 }
 
@@ -3192,7 +3192,8 @@ async function handleGpxFiles(files) {
                 if (typeof loadRoute === 'function') loadRoute(0);
                 if (typeof setupProgressBar === 'function') setupProgressBar();
             } catch (err) {
-                console.error("最終渲染失敗:", err);
+
+
             }
         }, 300);
     }
@@ -3296,12 +3297,12 @@ function renderMultiGpxButtons() {
     const bar = document.getElementById('multiGpxBtnBar');
     if (!bar || !gpxManagerControlContainer) return;
 
-    
+    // 狀態處理：如果有檔案，顯示 Bar
     if (multiGpxStack && multiGpxStack.length > 0) {
         document.body.classList.add('has-gpx-bar');
         gpxManagerControlContainer.style.display = 'block';
         
-        
+        // 更新管理按鈕內容
         gpxManagerControlContainer.innerHTML = `
             <a href="#" title="管理 GPX 顯示" style="
                 background-color: white; 
@@ -3327,28 +3328,28 @@ function renderMultiGpxButtons() {
         gpxManagerControlContainer.style.display = 'none';
     }
 
-    
+    // 清空並重新構建按鈕
     bar.innerHTML = ''; 
     
-    
+    // 關閉檔案按鈕
     const closeBtn = document.createElement('button');
     closeBtn.className = 'gpx-file-btn close-btn';
     closeBtn.innerHTML = '✕ 關閉檔案';
     closeBtn.onclick = (e) => {
         if (e) L.DomEvent.stopPropagation(e); 
-        clearAllMultiGPX();
+        if (typeof clearAllMultiGPX === 'function') clearAllMultiGPX();
         location.reload();
     };
     bar.appendChild(closeBtn);
     
     multiGpxStack.forEach((gpx, i) => {
-        
+        // 如果軌跡被隱藏，則不顯示按鈕
         if (gpx.visible === false) {
             if (gpx.layerGroup) map.removeLayer(gpx.layerGroup); 
             return; 
         }
 
-        
+        // 確保圖層在地圖上
         if (gpx.layerGroup && !map.hasLayer(gpx.layerGroup)) {
             map.addLayer(gpx.layerGroup);
         }
@@ -3356,13 +3357,22 @@ function renderMultiGpxButtons() {
         const btn = document.createElement('button');
         btn.className = 'gpx-file-btn';
         btn.id = `multi-btn-${i}`;
+        
+        // 增加 active 狀態判斷
+        if (i === window.currentMultiIndex) {
+            btn.classList.add('active');
+        }
+
         btn.textContent = gpx.name.length > 40 ? gpx.name.substring(0, 40) + "..." : gpx.name;
-        btn.style.borderLeft = `5px solid ${gpx.color}`;
-        btn.style.setProperty('--track-color', gpx.color);
+        
+        // --- 核心修正：強制顏色寫入 ---
+        // 使用 setProperty 搭配 important 確保在全螢幕下樣式依然有效
+        btn.style.setProperty('border-left', `5px solid ${gpx.color}`, 'important');
+        btn.style.setProperty('--track-color', gpx.color, 'important');
         
         btn.onclick = (e) => {
             if (e) L.DomEvent.stopPropagation(e);
-            switchMultiGpx(i);
+            if (typeof switchMultiGpx === 'function') switchMultiGpx(i);
         };
         bar.appendChild(btn);
     });
@@ -3511,7 +3521,6 @@ function isGpxInView(gpxData) {
         const bounds = L.latLngBounds(pointsForBounds.map(p => [p.lat, p.lon]));
         return map.getBounds().intersects(bounds);
     } catch (e) {
-        console.error(">>> [Error] 判斷視角範圍失敗:", e);
         return true; 
     }
 }
@@ -3802,94 +3811,140 @@ function showGpxManagementModal() {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'gpxManageModal';
-        modal.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; display:flex; align-items:center; justify-content:center; backdrop-filter: blur(2px);";
+        modal.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; backdrop-filter: blur(2px); display:none;";
         document.body.appendChild(modal);
     }
-    modal.style.display = 'flex';
+
+    const isNowFS = !!(document.fullscreenElement || document.webkitFullscreenElement || document.body.classList.contains('iphone-fullscreen'));
+    const mapContainer = document.getElementById('map');
+    
+    if (isNowFS && modal.parentElement !== mapContainer) {
+        mapContainer.appendChild(modal);
+    }
+
+    if (modal.style.display === 'none') {
+        modal.style.display = 'flex';
+    }
+
+    L.DomEvent.disableClickPropagation(modal);
+    L.DomEvent.disableScrollPropagation(modal);
 
     const defaultColors = ['#0000FF', '#FF3300', '#FF00FF', '#FFD600', '#9C27B0', '#33FF00', '#00FFFF', '#E91E63', '#1A73E8', '#00E676', '#FF8C00', '#BF00FF', '#A5F2F3', '#FFF000', '#87CEFA', '#FF1493'];
 
     let listHtml = `
         <div style="background:white; padding:20px; border-radius:12px; width:320px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); max-height: 80vh; display: flex; flex-direction: column; position: relative;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px;">
-                <h3 style="margin:0; font-size:18px;">管理軌跡</h3>
-                <button onclick="mergeSelectedGpx()" style="padding:5px 10px; background:#34a853; color:white; border:none; border-radius:4px; cursor:pointer; font-size:12px;">合併勾選</button>
+                <h3 style="margin:0; font-size:19px;">管理軌跡</h3>
             </div>
             <div style="flex: 1; overflow-y:auto; padding-right:5px;">`;
     
     multiGpxStack.forEach((gpx, i) => {
-        
-        const isChecked = gpx.visible !== false ? 'checked' : '';
+        const isVisible = (gpx.visible !== false);
+        const isChecked = isVisible ? 'checked' : '';
         const isFocused = (window.currentMultiIndex === i);
         
-        listHtml += `
-            <div style="margin-bottom: 10px; border: 1px solid ${isFocused ? '#1a73e8' : '#eee'}; border-radius: 8px; padding: 10px; background: ${isFocused ? '#f0f7ff' : '#fafafa'};">
-                <div style="display:flex; align-items:center; gap:12px;">
-                    <input type="checkbox" id="gpx-chk-${i}" ${isChecked} onchange="toggleGpxVisibility(${i})" 
-                        style="width:18px; height:18px; cursor: pointer;">
-                    
-                    <div onclick="toggleColorPicker(${i})" style="
-                        width: 22px; height: 22px; background: ${gpx.color || '#ff0000'}; 
-                        border-radius: 50%; cursor: pointer; border: 2px solid white; box-shadow: 0 0 0 1px #ddd;
-                        flex-shrink: 0;
-                    "></div>
+        // 使用中的不能被取消勾選
+        const disabledAttr = isFocused ? 'disabled' : '';
+        const cursorStyle = isFocused ? 'cursor: not-allowed; opacity: 0.6;' : 'cursor: pointer;';
 
-                    <label for="gpx-chk-${i}" style="font-size:14px; font-weight:500; cursor:pointer; color:${isFocused ? '#1a73e8' : '#333'}; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                        ${gpx.name} ${isFocused ? '<span style="font-size:11px; margin-left:5px; background:#1a73e8; color:white; padding:1px 4px; border-radius:3px;">使用中</span>' : ''}
-                    </label>
-                </div>
-                <div id="picker-${i}" style="display: none; margin-top: 12px; padding: 8px; background: white; border-radius: 6px; border: 1px solid #ddd; gap: 6px; flex-wrap: wrap; justify-content: center;">
-                    ${defaultColors.map(color => {
-                        const isSelected = gpx.color && gpx.color.toUpperCase() === color.toUpperCase();
-                        return `<div onclick="changeGpxColor(${i}, '${color}')" style="width: 24px; height: 24px; background: ${color}; border-radius: 4px; cursor: pointer; position: relative; border: ${isSelected ? '2px solid #333' : '1px solid rgba(0,0,0,0.1)'};"></div>`;
-                    }).join('')}
-                </div>
-            </div>`;
+        listHtml += `
+        <div style="margin-bottom: 10px; border: 1px solid ${isFocused ? '#1a73e8' : '#eee'}; border-radius: 8px; padding: 10px; background: ${isFocused ? '#f0f7ff' : '#fafafa'};">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <input type="checkbox" id="gpx-chk-${i}" ${isChecked} ${disabledAttr} onchange="toggleGpxVisibility(${i})" 
+                    style="width:18px; height:18px; ${cursorStyle} flex-shrink: 0;">
+                
+                <div onclick="toggleColorPicker(${i})" style="
+                    width: 22px; height: 22px; background: ${gpx.color || '#ff0000'}; 
+                    border-radius: 50%; cursor: pointer; border: 2px solid white; box-shadow: 0 0 0 1px #ddd;
+                    flex-shrink: 0;
+                "></div>
+
+                <label for="${isFocused ? '' : 'gpx-chk-' + i}" style="display:flex; align-items:center; cursor:${isFocused ? 'default' : 'pointer'}; flex:1; min-width:0;">
+                    <span title="${gpx.name}" style="font-size:14px; font-weight:500; color:${isFocused ? '#1a73e8' : '#333'}; 
+                                white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1;">
+                        ${gpx.name}
+                    </span>
+                    
+                    ${isFocused ? `
+                        <span class="is-using-label" style="font-size:10px; margin-left:10px; background:#1a73e8; color:white; 
+                                    padding:1px 6px; border-radius:10px; flex-shrink:0; white-space:nowrap;">
+                            使用中
+                        </span>` : ''}
+                </label>
+            </div>
+            <div id="picker-${i}" style="display: none; margin-top: 12px; padding: 8px; background: white; border-radius: 6px; border: 1px solid #ddd; gap: 6px; flex-wrap: wrap; justify-content: center;">
+                ${defaultColors.map(color => {
+                    const isSelected = gpx.color && gpx.color.toUpperCase() === color.toUpperCase();
+                    return `<div onclick="changeGpxColor(${i}, '${color}')" style="width: 24px; height: 24px; background: ${color}; border-radius: 4px; cursor: pointer; position: relative; border: ${isSelected ? '2px solid #333' : '1px solid rgba(0,0,0,0.1)'};"></div>`;
+                }).join('')}
+            </div>
+        </div>`;
     });
 
     listHtml += `</div>
             <button onclick="document.getElementById('gpxManageModal').style.display='none'" 
-                style="width:100%; margin-top:15px; padding:12px; background:#1a73e8; color:white; border:none; border-radius:8px; cursor:pointer; font-size:16px; font-weight:bold;">
+                style="width:100%; margin-top:15px; padding:12px; background:#1a73e8; color:white; border:none; border-radius:8px; cursor:pointer; font-size:13px; font-weight:bold;">
                 完成
             </button>
         </div>`;
     modal.innerHTML = listHtml;
-}
 
-
-function toggleGpxVisibility(idx) {
-    const chk = document.getElementById(`gpx-chk-${idx}`);
-    if (multiGpxStack[idx]) {
-        multiGpxStack[idx].visible = chk.checked;
-        if (typeof toggleGpx === 'function') toggleGpx(idx); 
+    // 這裡同步全螢幕字體設定，避免忽大忽小
+    if (isNowFS) {
+        syncFSFontSettings(modal);
     }
+
+    // 事件阻斷設定 (關鍵：排除 checkbox，否則無法勾選)
+    modal.querySelectorAll('[onclick], button').forEach(el => {
+        L.DomEvent.on(el, 'click', L.DomEvent.stopPropagation);
+    });
+    modal.querySelectorAll('input[type="checkbox"]').forEach(el => {
+        L.DomEvent.on(el, 'click', (e) => e.stopPropagation());
+    });
 }
 
 window.toggleGpx = function(index) {
+		const e = window.event;
+    // 如果點擊目標是 color picker 或者是觸發顏色盤的按鈕，就不要執行切換顯示
+    if (e && (e.target.type === 'color' || e.target.classList.contains('color-btn'))) {
+        return;
+    }
     const item = multiGpxStack[index];
-    if (!item) return;
-
+    const chk = document.getElementById(`gpx-chk-${index}`);
     
-    if (item.visible === undefined) item.visible = true;
-    item.visible = !item.visible;
+    if (!item) {
+        return;
+    }
+
+    // 修正點 1: 統一由 Checkbox 狀態決定，不再用 !item.visible 反轉
+    if (chk) {
+        item.visible = chk.checked;
+        
+    } else {
+        
+        item.visible = !item.visible;
+        
+    }
 
     
     if (item.layer) {
         if (item.visible) {
             if (!map.hasLayer(item.layer)) map.addLayer(item.layer);
+            
         } else {
             map.removeLayer(item.layer);
+            
         }
     }
 
     
     if (!item.visible && window.currentMultiIndex === index) {
+        
         if (window.activeRouteLayer) {
             map.removeLayer(window.activeRouteLayer);
             window.activeRouteLayer = null;
         }
         if (window.hoverMarker) map.removeLayer(window.hoverMarker);
-        
         
         const chartContainer = document.getElementById("chartContainer");
         if (chartContainer) chartContainer.style.display = "none";
@@ -3898,16 +3953,28 @@ window.toggleGpx = function(index) {
     }
 
     
-    showGpxManagementModal();
+    
     renderMultiGpxButtons();
 };
 
+
+function toggleGpxVisibility(idx) {
+    
+    if (event) event.stopPropagation();
+    
+    
+    window.toggleGpx(idx);
+}
+
 window.changeGpxColor = function(index, newColor) {
+    if (window.event) window.event.stopPropagation(); 
+
     const item = multiGpxStack[index];
     if (!item) return;
 
+    
     item.color = newColor;
-
+    
     
     if (item.layer && item.visible !== false) {
         const isCurrent = (window.currentMultiIndex === index);
@@ -3925,29 +3992,32 @@ window.changeGpxColor = function(index, newColor) {
         }
         window.currentTrackColor = newColor;
         
-        
         setTimeout(() => {
-            switchMultiGpx(index); 
+            if (typeof switchMultiGpx === 'function') switchMultiGpx(index); 
         }, 10);
     }
 
     
-    showGpxManagementModal();
+    
     renderMultiGpxButtons();
+
+    
+    setTimeout(() => {
+        showGpxManagementModal();
+    }, 50);
 };
 
 window.toggleColorPicker = function(i) {
+    if (window.event) window.event.stopPropagation(); 
     
     const targetPicker = document.getElementById(`picker-${i}`);
     const isCurrentlyHidden = (targetPicker.style.display === 'none');
-
     
     multiGpxStack.forEach((_, idx) => {
         const p = document.getElementById(`picker-${idx}`);
         if (p) p.style.display = 'none';
     });
 
-    
     if (isCurrentlyHidden) {
         targetPicker.style.display = 'flex';
     }
@@ -3987,7 +4057,6 @@ window.handleWptEdit = function(existingIdx, lat, lon, ele, oldName, timeStr, or
     const deleteBtn = document.getElementById('modalWptDelete');
 
     if (!modal || !nameInput || !eleInput || !confirmBtn) {
-        console.error("找不到編輯 Modal 的 DOM 元件");
         return;
     }
 
@@ -4569,7 +4638,16 @@ function renderSuggestions(data) {
     }
     data.forEach(item => {
         const div = document.createElement('div');
-        div.style.padding = '8px 12px'; div.style.cursor = 'pointer'; div.style.borderBottom = '1px solid #eee';
+        
+        div.style.cssText = `
+            padding: 10px 12px; 
+            cursor: pointer; 
+            border-bottom: 1px solid #eee; 
+            font-size: 15px !important; 
+            line-height: 1.4 !important;
+            color: #333; 
+            background: white;
+        `;
         div.innerText = item.display_name;
         div.onmouseover = () => div.style.background = '#f0f0f0';
         div.onmouseout = () => div.style.background = 'white';
@@ -4762,7 +4840,7 @@ window.focusWaypointWithLog = function(originalIdx, name) {
     if (wpt) {
         window.focusWaypoint(wpt.lat, wpt.lon, wpt.name, 0, wpt.ele);
     } else {
-        console.error(`[Error] 在 multiGpxStack 中找不到索引 ${originalIdx} 的資料！`);
+
     }
 };
 
@@ -4899,8 +4977,7 @@ window.toggleSelectAll = function(source) {
 window.initWptSortable = function() {
     const el = document.getElementById('wptTableBody');
     if (!el) {
-        console.error("找不到 wptTableBody，無法初始化拖移");
-        return;
+          return;
     }
 
     
@@ -4942,7 +5019,6 @@ window.initWptSortable = function() {
 
 function rebuildXmlFromWaypoints(item) {
     if (!item || !item.content) {
-        console.warn("rebuildXmlFromWaypoints: 項目或 XML 內容不存在");
         return;
     }
 
@@ -4991,7 +5067,7 @@ function rebuildXmlFromWaypoints(item) {
         const serializer = new XMLSerializer();
         item.content = serializer.serializeToString(xmlDoc);
     } catch (error) {
-        console.error("❌ rebuildXmlFromWaypoints 發生錯誤:", error);
+ 
     }
 }
 
@@ -5152,14 +5228,14 @@ class HistoryManager {
     }
 
     getBtnState(type) {
-        const hasItems = type === 'undo' ? this.undoStack.length > 0 : this.redoStack.length > 0;
-        return {
-            color: hasItems ? "#1a73e8" : "#ccc",
-            opacity: hasItems ? "1" : "0.6",
-            cursor: hasItems ? "pointer" : "default",
-            disabled: hasItems ? "" : "disabled"
-        };
-    }
+    const hasItems = type === 'undo' ? this.undoStack.length > 0 : this.redoStack.length > 0;
+    return {
+        color: hasItems ? "#1a73e8" : "#ccc",     
+        opacity: hasItems ? "1" : "0.5",          
+        cursor: hasItems ? "pointer" : "default",
+        disabled: !hasItems                        
+    };
+}
 
     execute(command) {
         command.do();
@@ -5206,13 +5282,50 @@ class HistoryManager {
     }
 
     updateUI() {
-        const u = this.getBtnState('undo');
-        const r = this.getBtnState('redo');
-        const ub = document.getElementById('undoBtn');
-        const rb = document.getElementById('redoBtn');
-        if (ub) { ub.style.color = u.color; ub.style.opacity = u.opacity; ub.disabled = !!u.disabled; }
-        if (rb) { rb.style.color = r.color; rb.style.opacity = r.opacity; rb.disabled = !!r.disabled; }
+    const u = this.getBtnState('undo');
+    const r = this.getBtnState('redo');
+    const ub = document.getElementById('undoBtn');
+    const rb = document.getElementById('redoBtn');
+
+    
+    
+    
+
+    if (ub) {
+        if (u.isDisabled) {
+            ub.setAttribute('disabled', 'disabled');
+        } else {
+            ub.removeAttribute('disabled');
+        }
+        ub.style.setProperty('color', u.color, 'important');
+        ub.style.setProperty('opacity', u.opacity, 'important');
+        
+        
+        
+    } else {
+ 
     }
+
+    if (rb) {
+        if (r.isDisabled) {
+            rb.setAttribute('disabled', 'disabled');
+        } else {
+            rb.removeAttribute('disabled');
+        }
+        rb.style.setProperty('color', r.color, 'important');
+        rb.style.setProperty('opacity', r.opacity, 'important');
+    }
+
+    
+    const wb = document.getElementById('sideWptNameBtn');
+    if (wb) {
+        const isActive = (typeof showWptNameAlways !== 'undefined' && showWptNameAlways);
+        wb.style.setProperty('background', isActive ? "#1a73e8" : "white", 'important');
+        wb.style.setProperty('color', isActive ? "white" : "#5f6368", 'important');
+        const icon = wb.querySelector('.material-icons');
+        if (icon) icon.innerText = isActive ? "visibility" : "visibility_off";
+    }
+}
 }
 
 const historyManager = new HistoryManager();
@@ -5260,85 +5373,7 @@ if (typeof window.routeSelectOriginalParent === 'undefined') {
     window.routeSelectOriginalParent = document.getElementById('routeSelectContainer').parentElement;
 }
 
-document.addEventListener('fullscreenchange', () => {
-    const mapContainer = document.getElementById('map');
-    const navShortcuts = document.getElementById('navShortcuts');
-    const routeSelectContainer = document.getElementById('routeSelectContainer');
-    
-    const isNowFS = !!(document.fullscreenElement || document.webkitFullscreenElement || document.body.classList.contains('iphone-fullscreen'));
 
-    
-    
-
-    if (isNowFS) {
-        
-        if (navShortcuts) mapContainer.appendChild(navShortcuts);
-        
-        if (routeSelectContainer) {
-            
-            if (!window.routeSelectOriginalParent || window.routeSelectOriginalParent.id === 'map') {
-                window.routeSelectOriginalParent = document.querySelector('.subtitle div') || document.getElementById('header');
-            }
-
-            mapContainer.appendChild(routeSelectContainer);
-            L.DomEvent.disableClickPropagation(routeSelectContainer);
-
-            
-            const tracksCount = (window.allTracks) ? window.allTracks.length : 0;
-            const stackCount = (window.multiGpxStack) ? window.multiGpxStack.length : 0;
-            const hasMultiple = tracksCount > 1 || stackCount > 1;
-
-            
-
-            if (hasMultiple) {
-                routeSelectContainer.style.cssText = `
-                    display: block !important;
-                    position: absolute !important;
-                    top: 15px !important;
-                    left: 50% !important;
-                    transform: translateX(-50%) !important;
-                    z-index: 2147483647 !important;
-                    background: #1a73e8 !important;
-                `;
-                if (navShortcuts) navShortcuts.style.setProperty('top', '65px', 'important');
-                
-            } else {
-                routeSelectContainer.style.cssText = `display: none !important;`;
-                if (navShortcuts) navShortcuts.style.setProperty('top', '30px', 'important');
-                
-            }
-        }
-    } else {
-        
-        if (navShortcuts) {
-            const subtitleArea = document.querySelector('.subtitle div');
-            if (subtitleArea) subtitleArea.prepend(navShortcuts);
-            navShortcuts.style.cssText = ""; 
-            navShortcuts.style.display = 'flex';
-        }
-        
-        if (routeSelectContainer && window.routeSelectOriginalParent) {
-            window.routeSelectOriginalParent.appendChild(routeSelectContainer);
-            routeSelectContainer.style.cssText = ""; 
-            
-            const finalCount = (window.allTracks ? window.allTracks.length : 0);
-            routeSelectContainer.style.display = (finalCount > 1) ? 'block' : 'none';
-            
-        }
-    }
-});
-
-const navBar = document.getElementById('navShortcuts');
-if (navBar) {
-    
-    L.DomEvent.disableClickPropagation(navBar);
-    
-    
-    L.DomEvent.on(navBar, 'mousewheel', L.DomEvent.stopPropagation);
-    
-    
-    L.DomEvent.on(navBar, 'dblclick', L.DomEvent.stopPropagation);
-}
 
 window.showAppConfirm = function(title, message, onConfirm, onCancel, btnText = "確定") {
     const modal = document.getElementById('deleteConfirmModal');
@@ -5373,7 +5408,6 @@ let _lastFSState = null;
 let routeSelectOriginalParent = null;
 
 function handleFullscreenStateChange() {
-    
     setTimeout(() => {
         const mapContainer = document.getElementById('map');
         const navShortcuts = document.getElementById('navShortcuts');
@@ -5383,10 +5417,10 @@ function handleFullscreenStateChange() {
             document.getElementById('wptEditModal'),
             document.getElementById('deleteConfirmModal'),
             document.getElementById('renameModal'),
-            document.getElementById('coordModal')
+            document.getElementById('coordModal'), 
+            document.getElementById('gpxManageModal'),
+            document.getElementById('searchModal')
         ];
-
-        
         const isNowFS = !!(
             document.fullscreenElement || 
             document.webkitFullscreenElement || 
@@ -5395,88 +5429,95 @@ function handleFullscreenStateChange() {
 
         
         if (routeSelectContainer) {
-            
             mapContainer.appendChild(routeSelectContainer);
             L.DomEvent.disableClickPropagation(routeSelectContainer);
-
             const total = (window.allTracks ? window.allTracks.length : 0);
             const stackTotal = (window.multiGpxStack ? window.multiGpxStack.length : 0);
-
+            
             if (total > 1 || stackTotal > 1) {
-                
                 routeSelectContainer.style.cssText = `
                     display: block !important;
                     position: absolute !important;
                     top: 15px !important;
-                    left: 50% !important;
+                    left: 10% !important;
                     transform: translateX(-50%) !important;
                     z-index: 2147483645 !important;
-                    background: #1a73e8 !important; /* 統一使用藍色背景，增加辨識度 */
+                    background: white !important; 
                     padding: 4px 15px !important;
-                    border-radius: 25px !important;
-                    color: white !important;
+                    border-radius: 20px !important;
+                    color: #000000 !important;
                     width: auto !important;
+                    font-size: 14px !important; 
                     border: 1px solid rgba(255,255,255,0.3) !important;
                     box-shadow: 0 2px 6px rgba(0,0,0,0.3) !important;
                 `;
-                
-                const selectEl = routeSelectContainer.querySelector('select');
-                if (selectEl) {
-                    selectEl.style.background = "transparent";
-                    selectEl.style.color = "white";
-                    selectEl.style.border = "none";
-                }
-                
-                
-                if (navShortcuts) {
-                    navShortcuts.style.setProperty('top', '65px', 'important');
-                }
-            } else {
-                routeSelectContainer.style.setProperty('display', 'none', 'important');
-                if (navShortcuts) navShortcuts.style.setProperty('top', '30px', 'important');
             }
         }
-
+        
         if (isNowFS) {
             
-            if (navShortcuts) {
-                mapContainer.appendChild(navShortcuts);
-                navShortcuts.style.setProperty('z-index', '2147483640', 'important');
-            }
-            
-            
             modals.forEach(modal => { 
-                if (modal) {
-                    mapContainer.appendChild(modal);
-                    modal.style.setProperty('z-index', '2147483647', 'important');
-                    L.DomEvent.disableClickPropagation(modal);
-                }
-            });
+					    if (modal) {
+					        mapContainer.appendChild(modal);
+					        modal.style.setProperty('z-index', '2147483647', 'important');
+					        
+					        
+					        modal.style.fontSize = "16px";
+					        
+					        
+					        const boldTitles = modal.querySelectorAll('b, h3');
+					        boldTitles.forEach(t => t.style.setProperty('font-size', '22px', 'important'));
+					        
+					        
+					        
+					        const icons = modal.querySelectorAll('.material-icons');
+					        icons.forEach(icon => {
+					            
+					            icon.style.setProperty('font-size', '32px', 'important'); 
+					            icon.style.setProperty('line-height', '1', 'important');
+					            
+					            
+					            const parent = icon.parentElement;
+					            
+					            if (parent && parent !== modal) {
+					                parent.style.setProperty('width', '60px', 'important');
+					                parent.style.setProperty('height', '60px', 'important');
+					                parent.style.setProperty('display', 'flex', 'important');
+					                parent.style.setProperty('align-items', 'center', 'important');
+					                parent.style.setProperty('justify-content', 'center', 'important');
+					            }
+					        });
+					
+					        
+					        const uiElements = modal.querySelectorAll('input, button, select, label, span, p');
+					        uiElements.forEach(el => {
+					            
+					            if (el.classList.contains('material-icons')) return;
+					
+					            if (el.tagName === 'P' || el.style.fontSize === '10px') {
+					                el.style.setProperty('font-size', '14px', 'important'); 
+					            } else {
+					                el.style.setProperty('font-size', '15px', 'important');
+					            }
+					        });
+					        
+					
+					        L.DomEvent.disableClickPropagation(modal);
+					    }
+					});
         } else {
             
-            if (navShortcuts) {
-                const subtitleArea = document.querySelector('.subtitle div');
-                if (subtitleArea) subtitleArea.prepend(navShortcuts);
-                navShortcuts.style.cssText = "";
-                navShortcuts.style.display = 'flex';
-            }
-
             modals.forEach(modal => { 
                 if (modal) {
                     document.body.appendChild(modal);
                     modal.style.removeProperty('z-index');
-                    if (modal._fsObserver) {
-                        modal._fsObserver.disconnect();
-                        delete modal._fsObserver;
-                    }
+                    
+                    
+                    modal.style.fontSize = "";
+                    const allText = modal.querySelectorAll('b, h3, input, button, select, label, span, p');
+                    allText.forEach(el => el.style.removeProperty('font-size'));
                 }
             });
-
-            if (window.map) {
-                window.map.dragging.enable();
-                window.map.scrollWheelZoom.enable();
-                window.map.doubleClickZoom.enable();
-            }
         }
 
         if (typeof renderWaypointsAndPeaks === 'function') {
@@ -5498,3 +5539,51 @@ const fsClassObserver = new MutationObserver((mutations) => {
     });
 });
 fsClassObserver.observe(document.body, { attributes: true });
+
+function renderSideToolbar() {
+    const sideToolbar = document.getElementById('side-toolbar');
+    if (!sideToolbar) {
+        return;
+    }
+
+    if (sideToolbar.innerHTML.trim() !== "") {
+        if (window.historyManager) historyManager.updateUI();
+        return;
+    }
+
+    sideToolbar.innerHTML = `
+		    <button type="button" id="sideWptNameBtn" class="side-tool-btn" title="顯示/隱藏航點名稱">
+		        <span class="material-icons" id="sideWptIcon">visibility</span>
+		    </button>
+		    <div style="height: 1px; background: rgba(0,0,0,0.1); margin: 2px 5px;"></div>
+		    <button type="button" id="undoBtn" class="side-tool-btn" title="復原 (Undo)">
+		        <span class="material-icons">undo</span>
+		    </button>
+		    <button type="button" id="redoBtn" class="side-tool-btn" title="重做 (Redo)">
+		        <span class="material-icons">redo</span>
+		    </button>
+		`;
+
+    
+    const btns = sideToolbar.querySelectorAll('.side-tool-btn');
+    btns.forEach(btn => {
+        
+        L.DomEvent.disableClickPropagation(btn);
+        L.DomEvent.disableScrollPropagation(btn);
+    });
+
+    
+    document.getElementById('sideWptNameBtn').onclick = function(e) {
+        toggleWptNames();
+    };
+    document.getElementById('undoBtn').onclick = function(e) {
+        historyManager.undo();
+    };
+    document.getElementById('redoBtn').onclick = function(e) {
+        historyManager.redo();
+    };
+
+    setTimeout(() => {
+        if (window.historyManager) historyManager.updateUI();
+    }, 50);
+}
