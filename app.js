@@ -4179,16 +4179,23 @@ function processSave(finalName, finalEle) {
     };
 
     historyManager.execute({
-        do: () => {
-            if (isEditing) {
-                multiGpxStack[stackIdx].waypoints[existingIdx].name = finalName;
-                multiGpxStack[stackIdx].waypoints[existingIdx].ele = parseFloat(finalEle);
-            } else {
-                addedWptRef = { lat, lon, name: finalName, ele: parseFloat(finalEle) || 0 };
-                multiGpxStack[stackIdx].waypoints.push(addedWptRef);
-            }
-            runBehavior(false, { lat, lng: lon });
-        },
+    do: () => {
+        if (isEditing) {
+            multiGpxStack[stackIdx].waypoints[existingIdx].name = finalName;
+            multiGpxStack[stackIdx].waypoints[existingIdx].ele = parseFloat(finalEle);
+        } else {
+            addedWptRef = { 
+                lat, 
+                lon, 
+                name: finalName, 
+                ele: parseFloat(finalEle) || 0,
+                time: currentEditTask.timeStr || new Date().toISOString(),
+                localTime: currentEditTask.timeStr || formatDate(new Date(new Date().getTime() + 8*3600000))
+            };
+            multiGpxStack[stackIdx].waypoints.push(addedWptRef);
+        }
+        runBehavior(false, { lat, lng: lon });
+    },
         undo: () => {
             let restorePos = { lat, lng: lon };
             if (isEditing) {
