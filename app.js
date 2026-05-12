@@ -1378,15 +1378,9 @@ function toggleWptNames() {
 		}
 
 		window.toggleCompass = function() {
-		//		const compass = document.querySelector(".map-compass");
-		    const compass = document.getElementById("mapCompass");
-    if (compass) {
-        compass.classList.toggle("show");
-        if (compass.classList.contains("show")) {
-            initRealCompass(); // 開啟時啟動感測器
-        }
-    }
-};
+				const compass = document.querySelector(".map-compass");
+		    if (compass) { compass.classList.toggle("show"); }
+		};
 
 		const CombinedControl = L.Control.extend({
     options: { position: 'topleft' }, 
@@ -5592,34 +5586,4 @@ function renderSideToolbar() {
     setTimeout(() => {
         if (window.historyManager) historyManager.updateUI();
     }, 50);
-}
-
-function initRealCompass() {
-    // 檢查瀏覽器是否支援感測器
-    if (window.DeviceOrientationEvent) {
-        // iOS 需要使用者授權
-        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-            DeviceOrientationEvent.requestPermission()
-                .then(permissionState => {
-                    if (permissionState === 'granted') {
-                        window.addEventListener('deviceorientation', handler, true);
-                    }
-                });
-        } else {
-            // Android 或其他瀏覽器直接監聽
-            window.addEventListener('deviceorientationabsolute', handler, true);
-        }
-    }
-
-    function handler(e) {
-        // 取得相對於北方的角度 (alpha)
-        let compass = e.webkitCompassHeading || e.alpha;
-        if (compass === null) return;
-
-        const compassEl = document.getElementById('mapCompass'); // 你的指北針外框
-        if (compassEl) {
-            // 讓指北針反向旋轉，維持指向北方
-            compassEl.style.transform = `rotate(${-compass}deg)`;
-        }
-    }
 }
