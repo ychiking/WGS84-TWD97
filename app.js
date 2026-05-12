@@ -5446,7 +5446,7 @@ function handleFullscreenStateChange() {
                     display: block !important;
                     position: absolute !important;
                     top: 15px !important;
-                    left: 200px !important;
+                    left: 180px !important;
                     z-index: 2147483645 !important;
                     background: white !important; 
                     padding: 4px 15px !important;
