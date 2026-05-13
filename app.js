@@ -3992,7 +3992,7 @@ function processSave(finalName, finalEle) {
         if (allTracks.length === 0) {
             allTracks.push(multiGpxStack[stackIdx]);
         } else {
-            
+            // 同步資料：確保 allTracks 拿到的永遠是最新的 multiGpxStack 內容
             allTracks.forEach(track => { track.waypoints = multiGpxStack[stackIdx].waypoints; });
         }
 
@@ -4018,7 +4018,6 @@ function processSave(finalName, finalEle) {
                 multiGpxStack[stackIdx].waypoints[existingIdx].name = finalName;
                 multiGpxStack[stackIdx].waypoints[existingIdx].ele = parseFloat(finalEle);
             } else {
-                
                 if (!addedWptRef) {
                     addedWptRef = { 
                         lat, lon, name: finalName, ele: parseFloat(finalEle) || 0,
@@ -4041,13 +4040,11 @@ function processSave(finalName, finalEle) {
                 targetWpt.ele = oldWptSnapshot.ele;
                 restorePos = { lat: targetWpt.lat, lng: targetWpt.lon };
             } else {
-                
                 const idx = multiGpxStack[stackIdx].waypoints.indexOf(addedWptRef);
                 if (idx > -1) {
                     multiGpxStack[stackIdx].waypoints.splice(idx, 1);
                 }
             }
-            
             runBehavior(true, restorePos);
         }
     });
