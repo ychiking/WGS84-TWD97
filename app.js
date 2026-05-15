@@ -176,19 +176,14 @@ map.on('mousemove', (e) => {
             };
             
             let stackIdx = window.currentMultiIndex || 0;
+            const targetTrack = multiGpxStack[stackIdx];
+            const currentColor = targetTrack.color || "#0000FF"; // 抓取管理軌跡顏色
             
-            // --- 安全性檢查修正 ---
-            let targetTrack = multiGpxStack[stackIdx];
-            let currentColor = "#0000FF"; // 預設藍色
-
-            if (targetTrack) {
-                currentColor = targetTrack.color || currentColor;
-                // 注意：mousemove 這裡「只」負責畫線，不要在這裡 push 點位到 targetTrack.points
-                // 這樣會導致 Undo 邏輯混亂。點位應該只存在 tempDrawPoints
-            }
+            targetTrack.points.push(p);
             
             if (polyline) {
                 polyline.addLatLng(e.latlng);
+                // 關鍵：確保繪製過程中的顏色與管理軌跡一致，且不透明
                 polyline.setStyle({ color: currentColor, opacity: 1.0, weight: 6 });
             }
             
@@ -198,144 +193,97 @@ map.on('mousemove', (e) => {
     }
 });
 
-// 在 window.addEventListener('mouseup', (e) => { ... }) 內部
 window.addEventListener('mouseup', (e) => {
     if (isScribbling) {
         isScribbling = false;
         
+        // 1. 取得當前操作的專案索引與物件
+        const stackIdx = window.currentMultiIndex || 0;
+        const targetTrack = (window.multiGpxStack && window.multiGpxStack[stackIdx]);
+
+        // 如果連 targetTrack 都沒有（理論上不應發生），則不動作
+        if (!targetTrack) {
+            tempDrawPoints = [];
+            return;
+        }
+
         const pointsSnapshot = [...tempDrawPoints]; 
         if (pointsSnapshot.length === 0) return;
 
-        // 取得目前的索引（預設為 0）
-        const stackIdx = window.currentMultiIndex || 0;
-        
-        // --- 核心分流判斷 ---
-        // 1. 檢查 Stack 是否完全沒東西
-        // 2. 或是目前的 Track 裡面根本沒有點 (points.length === 0)
-        const isActuallyBlank = (
-            !window.multiGpxStack || 
-            window.multiGpxStack.length === 0 || 
-            (window.multiGpxStack[stackIdx] && window.multiGpxStack[stackIdx].points.length === 0)
-        );
+        const command = {
+            pointsToAdd: pointsSnapshot,
+            targetTrack: targetTrack,
+            fileIndex: stackIdx,
+            do: function() {
+                // --- A. 里程計算 (確保 Route Info 有資料) ---
+                let lastDist = (this.targetTrack.points && this.targetTrack.points.length > 0) 
+                               ? (this.targetTrack.points[this.targetTrack.points.length - 1].distance || 0) 
+                               : 0;
 
-        if (isActuallyBlank) {
-            // 執行 Logic A：空白地圖初始化並繪製
-            handleBlankMapScribble(pointsSnapshot, stackIdx);
-        } else {
-            // 執行 Logic B：匯入模式（包含里程計算與曲線保留）
-            handleImportedScribble(pointsSnapshot, stackIdx);
-        }
+                this.pointsToAdd.forEach((p, i) => {
+                    if (i > 0) {
+                        lastDist += calculateDistance(
+                            this.pointsToAdd[i-1].lat, this.pointsToAdd[i-1].lon,
+                            this.pointsToAdd[i].lat, this.pointsToAdd[i].lon
+                        );
+                    } else if (this.targetTrack.points.length > 0) {
+                        const prevP = this.targetTrack.points[this.targetTrack.points.length - 1];
+                        lastDist += calculateDistance(prevP.lat, prevP.lon, this.pointsToAdd[i].lat, this.pointsToAdd[i].lon);
+                    }
+                    this.pointsToAdd[i].distance = lastDist;
+                });
+
+                // --- B. 核心資料同步 (解決線條消失問題) ---
+                // 將新點加入 points 陣列
+                if (!this.targetTrack.points) this.targetTrack.points = [];
+                this.targetTrack.points.push(...this.pointsToAdd);
+                
+                // 【關鍵修復】：同步更新 segments
+                // app繪製路線9 的 loadRoute 優先讀取 segments，若不更新，繪製完線會被 loadRoute 清掉
+                this.targetTrack.segments = [this.targetTrack.points.map(p => [p.lat, p.lon])];
+
+                // 同步至全域變數，供 renderRouteInfo 使用
+                window.trackPoints = this.targetTrack.points;
+                
+                // 如果 allTracks 存在，也要同步（匯出功能通常抓這裡）
+                if (window.allTracks && window.allTracks[this.fileIndex]) {
+                    window.allTracks[this.fileIndex].points = this.targetTrack.points;
+                    window.allTracks[this.fileIndex].segments = this.targetTrack.segments;
+                }
+
+                // --- C. 執行渲染 ---
+                // 更新地圖上的 Polyline 圖層
+                if (this.targetTrack.layer instanceof L.Polyline) {
+                    this.targetTrack.layer.setLatLngs(this.targetTrack.segments);
+                }
+
+                // 觸發資訊欄更新與重新繪圖
+                loadRoute(this.fileIndex);
+                if (typeof renderRouteInfo === 'function') renderRouteInfo();
+            },
+            undo: function() {
+                this.targetTrack.points.splice(-this.pointsToAdd.length);
+                this.targetTrack.segments = [this.targetTrack.points.map(p => [p.lat, p.lon])];
+                
+                if (this.targetTrack.layer instanceof L.Polyline) {
+                    this.targetTrack.layer.setLatLngs(this.targetTrack.segments);
+                }
+                
+                window.trackPoints = this.targetTrack.points;
+                loadRoute(this.fileIndex);
+                if (typeof renderRouteInfo === 'function') renderRouteInfo();
+            }
+        };
+
+        // 執行指令並記錄歷史
+        command.do();
+        historyManager.undoStack.push(command);
+        historyManager.redoStack = [];
+        historyManager.updateUI();
         
-        // 清理暫存，準備下一次繪製
         tempDrawPoints = []; 
     }
 });
-
-// --- 邏輯 A：空白地圖專用 (你提供的第一段) ---
-function handleBlankMapScribble(pointsSnapshot, stackIdx) {
-    // 確保基礎結構
-    if (!window.multiGpxStack || window.multiGpxStack.length === 0) {
-        const newGpx = {
-            name: "自訂路線",
-            color: '#0000FF',
-            points: [],
-            waypoints: [],
-            visible: true,
-            layer: L.featureGroup().addTo(map)
-        };
-        window.multiGpxStack = [newGpx];
-        window.allTracks = window.multiGpxStack;
-    }
-
-    const targetTrack = window.multiGpxStack[0];
-    if (!targetTrack.points) targetTrack.points = [];
-
-    const command = {
-        addedPoints: pointsSnapshot,
-        targetTrack: targetTrack,
-        fileIndex: 0,
-        do: function() {
-            if (!this.targetTrack.points.includes(this.addedPoints[0])) {
-                this.targetTrack.points.push(...this.addedPoints);
-            }
-            // 空白模式下的圖層同步
-            if (this.targetTrack.layer instanceof L.Polyline) {
-                this.targetTrack.layer.setLatLngs(this.targetTrack.points.map(p => [p.lat, p.lon]));
-            }
-            window.trackPoints = this.targetTrack.points;
-            if (window.allTracks && window.allTracks[this.fileIndex]) {
-                window.allTracks[this.fileIndex].points = this.targetTrack.points;
-            }
-            loadRoute(0);
-        },
-        undo: function() {
-            this.targetTrack.points.splice(-this.addedPoints.length);
-            if (this.targetTrack.layer instanceof L.Polyline) {
-                this.targetTrack.layer.setLatLngs(this.targetTrack.points.map(p => [p.lat, p.lon]));
-            }
-            window.trackPoints = this.targetTrack.points;
-            loadRoute(0);
-        }
-    };
-    executeCommand(command);
-}
-
-// --- 邏輯 B：匯入專用 (你提供的第二段，包含里程計算與曲線保留) ---
-function handleImportedScribble(pointsSnapshot, stackIdx) {
-    const targetTrack = window.multiGpxStack[stackIdx];
-    if (!targetTrack) return;
-
-    const command = {
-        addedPoints: pointsSnapshot,
-        targetTrack: targetTrack,
-        fileIdx: stackIdx,
-        do: function() {
-            // 1. 補算里程 (防止高度表出錯)
-            let lastDist = (this.targetTrack.points && this.targetTrack.points.length > 0) 
-                           ? this.targetTrack.points[this.targetTrack.points.length - 1].distance 
-                           : 0;
-
-            for (let i = 0; i < this.addedPoints.length; i++) {
-                if (i > 0) {
-                    lastDist += calculateDistance(
-                        this.addedPoints[i-1].lat, this.addedPoints[i-1].lon,
-                        this.addedPoints[i].lat, this.addedPoints[i].lon
-                    );
-                } else if (this.targetTrack.points.length > 0) {
-                    const prevP = this.targetTrack.points[this.targetTrack.points.length - 1];
-                    lastDist += calculateDistance(prevP.lat, prevP.lon, this.addedPoints[i].lat, this.addedPoints[i].lon);
-                }
-                this.addedPoints[i].distance = lastDist;
-            }
-
-            // 2. 推入資料並強制同步 segments (保留曲線)
-            this.targetTrack.points.push(...this.addedPoints);
-            window.trackPoints = this.targetTrack.points;
-            this.targetTrack.segments = [this.targetTrack.points.map(p => [p.lat, p.lon])];
-
-            if (window.allTracks && window.allTracks[this.fileIdx]) {
-                window.allTracks[this.fileIdx].points = this.targetTrack.points;
-                window.allTracks[this.fileIdx].segments = this.targetTrack.segments;
-            }
-            loadRoute(window.currentActiveIndex || 0);
-        },
-        undo: function() {
-            this.targetTrack.points.splice(-this.addedPoints.length);
-            this.targetTrack.segments = [this.targetTrack.points.map(p => [p.lat, p.lon])];
-            window.trackPoints = this.targetTrack.points;
-            loadRoute(window.currentActiveIndex || 0);
-        }
-    };
-    executeCommand(command);
-}
-
-// 輔助函式：執行並存入歷史紀錄
-function executeCommand(command) {
-    command.do();
-    historyManager.undoStack.push(command);
-    historyManager.redoStack = [];
-    historyManager.updateUI();
-}
 
 function processGpxXml(text) {
     const xml = new DOMParser().parseFromString(text, "application/xml");
@@ -1123,6 +1071,7 @@ function initProgressBar() {
 }
 
 function loadRoute(index, customColor = null, focusPos = null) {
+		if (typeof customColor !== 'string') customColor = null;
     renderSideToolbar();
     window.currentActiveIndex = index;
     setTimeout(() => historyManager.updateUI(), 10);
@@ -1135,16 +1084,25 @@ function loadRoute(index, customColor = null, focusPos = null) {
     if (window.activeFocusCircle) window.activeFocusCircle = null;
     
     map.closePopup();
+    
     if (typeof window.clearABSettings === 'function') window.clearABSettings();
 
 		const stackIdx = window.currentMultiIndex || 0;
-    const sel = (window.multiGpxStack && window.multiGpxStack[stackIdx]) 
-                ? window.multiGpxStack[stackIdx] 
-                : (allTracks && allTracks[index] ? allTracks[index] : null);
-    if (!sel) return;
+    const currentFile = multiGpxStack[stackIdx];
+    
+    if (!currentFile) return;
+
+    // index 是在該檔案內下拉選單選取的「子路線索引」
+    // 我們從 allTracks 抓取，如果沒資料，則回頭抓檔案本身的 points
+    const sel = (allTracks && allTracks[index]) ? allTracks[index] : currentFile;
+    
+    // 3. 強化結合路線判定
+    const isSelectingCombined = (index === 0 || sel.isCombined === true || (sel.name && sel.name.includes("結合")));
     
     trackPoints = sel.points || []; 
-    window.trackPoints = trackPoints; // 雙重保險
+    window.trackPoints = trackPoints;
+    
+    let trackColor = customColor || currentFile.color || "#0000FF";
 
     // --- 檔案名稱與快取處理 ---
     const fileName = window.currentFileNameForDisplay || "default";
@@ -1194,84 +1152,59 @@ function loadRoute(index, customColor = null, focusPos = null) {
         return result;
     };
 
-    const drawSegments = isDrawingMode 
-    ? [trackPoints.map(p => [p.lat, p.lon])] 
-    : ((sel.segments && sel.segments.length > 0) ? sel.segments : breakTracks(trackPoints));
+    const drawSegments = (sel.segments && sel.segments.length > 0) 
+                         ? sel.segments 
+                         : breakTracks(trackPoints);
 
-    // --- 核心顏色邏輯融合 ---
-    if (customColor) {
-        sel.color = customColor;
-    }
+    multiGpxStack.forEach((item, i) => {
+        const layer = item.layer;
+        if (!(layer instanceof L.Polyline)) return;
 
-    let finalColor = customColor || sel.color || "#0000FF";
-
-    if (typeof multiGpxStack !== 'undefined' && multiGpxStack.length > 0) {
-        const stackIdx = (window.currentMultiIndex !== undefined) ? window.currentMultiIndex : 0;
-        
-        multiGpxStack.forEach((item, i) => {
-            const layer = item.layer;
-            if (!(layer instanceof L.Polyline)) return;
-            
-            if (item.segments && item.segments.length > 0) {
-                layer.setLatLngs(item.segments);
+        if (i === stackIdx) {
+            if (isSelectingCombined) {
+                // 觀看結合路線：隱藏原始檔案層，避免重疊
+                layer.setStyle({ opacity: 0, weight: 0 }); 
             } else {
-                const currentRawPts = layer.getLatLngs().flat(Infinity);
-                layer.setLatLngs(breakTracks(currentRawPts)); 
+                // 觀看子路線：檔案層設為半透明虛線
+                layer.setStyle({ color: item.color, opacity: 0.3, weight: 4, dashArray: "5, 8" });
             }
+        } else {
+            // 非當前檔案：顯示原本實線顏色
+            layer.setStyle({ color: item.color, opacity: 0.4, weight: 4, dashArray: null });
+        }
+    });
 
-            if (i === stackIdx) {
-                const isSelectingCombined = (index === 0 || (sel.name && sel.name.includes("結合")));
-                if (isSelectingCombined) {
-                    layer.setStyle({ opacity: 0, weight: 0 }); 
-                } else {
-                    layer.setStyle({ 
-                        color: item.color || "#666", 
-                        opacity: 0.5, 
-                        weight: 4, 
-                        dashArray: "5, 8" 
-                    });
-                    layer.bringToBack();
-                }
-                if (item.color) finalColor = customColor || item.color;
-            } else {
-                layer.setStyle({ 
-                    color: item.color || "#999", 
-                    opacity: 0.4, 
-                    weight: 4, 
-                    dashArray: null 
-                });
-                layer.bringToBack();
-            }
-        });
-    }
-    
-    if (!finalColor) finalColor = "#0000FF";
 
-    // --- 清理並重新建立主繪圖圖層 ---
-    if (polyline) map.removeLayer(polyline);
     markers.forEach(m => map.removeLayer(m));
     wptMarkers.forEach(m => map.removeLayer(m));
     if (window.chart) { window.chart.destroy(); window.chart = null; }
     markers = []; wptMarkers = []; 
 
-    // 【核心修正】：不論是否有軌跡點，都先建立一個空的 polyline
-    // 這確保了進入手繪模式時，mousemove 邏輯能執行 polyline.addLatLng()
+    if (polyline) map.removeLayer(polyline);
+    
     polyline = L.polyline([], { 
-        color: finalColor, 
+        color: trackColor, 
         weight: 6, 
         opacity: 1.0, 
         dashArray: null 
     }).addTo(map);
 
-    // 如果有點位資料，則填充線條並處理點擊事件與標記
     if (trackPoints && trackPoints.length > 0) {
+        // 座標分流：確保結合路線畫出所有段落
+        const drawSegments = isSelectingCombined 
+            ? (sel.segments && sel.segments.length > 0 ? sel.segments : [trackPoints.map(p => [p.lat, p.lon])])
+            : (isDrawingMode ? [trackPoints.map(p => [p.lat, p.lon])] : (sel.segments || breakTracks(trackPoints)));
+
         polyline.setLatLngs(drawSegments);
+        polyline.bringToFront();
 
         if (polyline.getBounds().isValid()) {
             if (!map.getBounds().pad(0.05).intersects(polyline.getBounds())) {
                 map.fitBounds(polyline.getBounds(), { padding: [20, 20], maxZoom: 16, animate: true });
             }
         }
+    
+
 
         polyline.on('click', (e) => {
             L.DomEvent.stopPropagation(e);
@@ -4104,27 +4037,25 @@ window.changeGpxColor = function(index, newColor) {
     if (!item) return;
     
     item.color = newColor; // 更新資料源
-    loadRoute(index, newColor);
-		if (typeof renderMultiGpxButtons === 'function') renderMultiGpxButtons();
+    
+    // 關鍵修正：換色時，強迫 loadRoute 載入該檔案的「結合路線 (0)」，並傳入新顏色
+    loadRoute(0, newColor); 
+    
+    if (typeof renderMultiGpxButtons === 'function') renderMultiGpxButtons();
 
     if (item.layer) {
-        const isCurrent = (window.currentMultiIndex === index);
+        // 同步檔案預覽層的顏色
         item.layer.setStyle({
             color: newColor,
-            opacity: 1.0,    // 關鍵：改為 1.0 確保不透明，顏色才會跟圓圈一模一樣
-            weight: isCurrent ? 6 : 4,
-            dashArray: null  // 關鍵：移除虛線，變回實線
+            opacity: 1.0,
+            weight: 6,
+            dashArray: null 
         });
     }
 
     if (window.currentMultiIndex === index) {
-        // 同步主線條顏色
         if (polyline) polyline.setStyle({ color: newColor, opacity: 1.0 });
-        
-        // 強迫 loadRoute 重新讀取顏色並刷新高度表
-        loadRoute(window.currentActiveIndex || 0, newColor);
     }
-    
     renderMultiGpxButtons();
     showGpxManagementModal(); 
 };
@@ -5783,69 +5714,67 @@ window.addEventListener('beforeunload', function (e) {
 });
 
 
-function addPointToTrack(latlng) {
+function addPointToTrack(latlng, isScribble = false) {
     let stackIdx = window.currentMultiIndex || 0;
     
-    // 檢查是否為空白狀態（尚未載入檔案且尚未開始繪圖）
-    const isBlank = (!window.multiGpxStack || window.multiGpxStack.length === 0 || 
-                    (window.multiGpxStack[stackIdx] && window.multiGpxStack[stackIdx].points.length === 0));
-
-    if (isBlank && (!window.multiGpxStack || window.multiGpxStack.length === 0)) {
-        // 初始化空白專案結構
+    // 1. 初始化資料結構（如果全空）
+    if (multiGpxStack.length === 0) {
         const newGpx = {
             name: "自訂路線",
+            // 關鍵：這裡改用 defaultColors 的第一個顏色 (藍色)，確保一致性
             color: '#0000FF', 
             points: [],
             waypoints: [],
             visible: true,
-            layer: L.polyline([], { color: '#0000FF', weight: 6, opacity: 1.0 }).addTo(map)
+            layer: L.featureGroup().addTo(map)
         };
-        window.multiGpxStack = [newGpx];
-        window.allTracks = window.multiGpxStack;
+        multiGpxStack.push(newGpx);
+        allTracks = multiGpxStack;
         if (typeof renderMultiGpxButtons === 'function') renderMultiGpxButtons();
     }
 
-    const targetTrack = window.multiGpxStack[stackIdx];
+    const targetTrack = multiGpxStack[stackIdx];
+    // 核心修正：永遠從管理軌跡物件抓顏色，不要寫死 "#1a73e8"
+    const currentColor = targetTrack.color || "#0000FF"; 
+    
     const newPoint = { 
         lat: latlng.lat, lon: latlng.lng, 
         ele: 0, timeLocal: formatDate(new Date()), distance: 0 
     };
 
-    // 使用 historyManager 執行直線增加動作
-    historyManager.execute({
-        point: newPoint,
-        targetTrack: targetTrack,
-        fileIdx: stackIdx,
-        do: function() {
-            // 計算里程（直線模式需要手動補算）
-            let lastDist = 0;
-            if (this.targetTrack.points.length > 0) {
-                const prevP = this.targetTrack.points[this.targetTrack.points.length - 1];
-                lastDist = (prevP.distance || 0) + calculateDistance(prevP.lat, prevP.lon, this.point.lat, this.point.lon);
-            }
-            this.point.distance = lastDist;
+    if (isScribble) {
+        // 2. 手繪模式：僅負責即時渲染與暫存點位
+        // 注意：這裡先不要推入 targetTrack.points，否則 Undo 會刪不掉
+        // 我們把點位存在 tempDrawPoints，等滑鼠放開 (mouseup) 再打包給 historyManager
+        tempDrawPoints.push(newPoint); 
 
-            this.targetTrack.points.push(this.point);
-            window.trackPoints = this.targetTrack.points;
+        if (polyline) {
+            polyline.addLatLng(latlng);
+            // 繪製時立即套用「管理軌跡」當前的顏色
+            polyline.setStyle({ color: currentColor, weight: 6, opacity: 1.0 });
+        }
+    } else {
+    // 3. 直線模式：點擊即產生 Undo 紀錄
+    historyManager.execute({
+        pointsToAdd: [newPoint],
+        do: function() {
+            // 先將點位推入原始資料陣列
+            targetTrack.points.push(...this.pointsToAdd);
             
-            // 同步圖層
-            if (this.targetTrack.layer instanceof L.Polyline) {
-                this.targetTrack.layer.setLatLngs(this.targetTrack.points.map(p => [p.lat, p.lon]));
-            }
+            // 【關鍵修正】：強制同步全域變數 trackPoints 
+            // 確保 loadRoute 進入時，讀取到的是已經增加點位後的陣列
+            window.trackPoints = targetTrack.points; 
             
+            // 執行渲染，此時 loadRoute 內的 trackPoints.length 至少為 1
             loadRoute(window.currentActiveIndex || 0);
         },
         undo: function() {
-            this.targetTrack.points.pop();
-            window.trackPoints = this.targetTrack.points;
-            
-            if (this.targetTrack.layer instanceof L.Polyline) {
-                this.targetTrack.layer.setLatLngs(this.targetTrack.points.map(p => [p.lat, p.lon]));
-            }
-            
+            targetTrack.points.splice(-this.pointsToAdd.length);
+            window.trackPoints = targetTrack.points;
             loadRoute(window.currentActiveIndex || 0);
         }
     });
+}
 }
 
 function executeCreateNewProject() {
