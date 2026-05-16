@@ -5598,18 +5598,23 @@ function renderSideToolbar() {
 				    document.getElementById('map').style.cursor = isDrawingMode ? 'crosshair' : '';
 				    
 				    if (isDrawingMode) {
-				        drawMethod = 'scribble';
-				        if (typeof showMapToast === 'function') showMapToast("手繪模式：按住拖曳繪製");
-				        map.dragging.disable();
-				        
-				        // 【關鍵補強】：進入模式時，確保當前專案的 polyline 物件已建立
-				        // 特別是針對剛匯入、點數還是 0 的純航點專案
-				        if (typeof loadRoute === 'function') {
-				            loadRoute(window.currentActiveIndex || 0);
-				        }
-				    } else {
-				        map.dragging.enable();
-				    }
+    drawMethod = 'scribble';
+    if (typeof showMapToast === 'function') showMapToast("手繪模式：按住拖曳繪製");
+    
+    // 【手機端關鍵】：停用瀏覽器預設手勢防止畫線時地圖偏移
+    document.getElementById('map').style.touchAction = 'none'; 
+    map.dragging.disable();
+    if (map.tap) map.tap.disable(); // 停用 Leaflet 在 iOS 上的點擊延遲補丁
+
+    if (typeof loadRoute === 'function') {
+        loadRoute(window.currentActiveIndex || 0);
+    }
+} else {
+    // 【手機端關鍵】：恢復預設手勢
+    document.getElementById('map').style.touchAction = ''; 
+    map.dragging.enable();
+    if (map.tap) map.tap.enable();
+}
 				};
 
         methodBtn.onclick = function(e) {
@@ -5814,5 +5819,132 @@ window.addEventListener('load', () => {
             }
         }, 100); // 建議設為 1000ms 比較保險
     } else {
+    }
+});
+
+// 封裝繪製結束的邏輯
+function handleDrawEnd(e) {
+    if (isScribbling) {
+        isScribbling = false;
+        
+        // 恢復地圖拖曳功能（重要：繪圖結束後要讓地圖能動）
+        map.dragging.enable();
+
+        const stackIdx = window.currentMultiIndex || 0;
+        const targetTrack = (window.multiGpxStack && window.multiGpxStack[stackIdx]);
+
+        if (!targetTrack) {
+            tempDrawPoints = [];
+            return;
+        }
+
+        const pointsSnapshot = [...tempDrawPoints]; 
+        if (pointsSnapshot.length === 0) return;
+
+        const command = {
+            pointsToAdd: pointsSnapshot,
+            targetTrack: targetTrack,
+            fileIndex: stackIdx,
+            do: function() {
+                // ... (你原本的 do 內容保持不變) ...
+                let lastDist = (this.targetTrack.points && this.targetTrack.points.length > 0) 
+                               ? (this.targetTrack.points[this.targetTrack.points.length - 1].distance || 0) 
+                               : 0;
+
+                this.pointsToAdd.forEach((p, i) => {
+                    if (i > 0) {
+                        lastDist += calculateDistance(
+                            this.pointsToAdd[i-1].lat, this.pointsToAdd[i-1].lon,
+                            this.pointsToAdd[i].lat, this.pointsToAdd[i].lon
+                        );
+                    } else if (this.targetTrack.points.length > 0) {
+                        const prevP = this.targetTrack.points[this.targetTrack.points.length - 1];
+                        lastDist += calculateDistance(prevP.lat, prevP.lon, this.pointsToAdd[i].lat, this.pointsToAdd[i].lon);
+                    }
+                    this.pointsToAdd[i].distance = lastDist;
+                });
+
+                if (!this.targetTrack.points) this.targetTrack.points = [];
+                this.targetTrack.points.push(...this.pointsToAdd);
+                this.targetTrack.segments = [this.targetTrack.points.map(p => [p.lat, p.lon])];
+                window.trackPoints = this.targetTrack.points;
+                
+                if (window.allTracks && window.allTracks[this.fileIndex]) {
+                    window.allTracks[this.fileIndex].points = this.targetTrack.points;
+                    window.allTracks[this.fileIndex].segments = this.targetTrack.segments;
+                }
+
+                if (this.targetTrack.layer instanceof L.Polyline) {
+                    this.targetTrack.layer.setLatLngs(this.targetTrack.segments);
+                }
+
+                loadRoute(this.fileIndex);
+                if (typeof renderRouteInfo === 'function') renderRouteInfo();
+            },
+            undo: function() {
+                // ... (你原本的 undo 內容保持不變) ...
+                this.targetTrack.points.splice(-this.pointsToAdd.length);
+                this.targetTrack.segments = [this.targetTrack.points.map(p => [p.lat, p.lon])];
+                if (this.targetTrack.layer instanceof L.Polyline) {
+                    this.targetTrack.layer.setLatLngs(this.targetTrack.segments);
+                }
+                window.trackPoints = this.targetTrack.points;
+                loadRoute(this.fileIndex);
+                if (typeof renderRouteInfo === 'function') renderRouteInfo();
+            }
+        };
+
+        command.do();
+        historyManager.undoStack.push(command);
+        historyManager.redoStack = [];
+        historyManager.updateUI();
+        
+        tempDrawPoints = []; 
+    }
+}
+
+// 同時監聽電腦與手機的結束事件
+window.addEventListener('mouseup', handleDrawEnd);
+window.addEventListener('touchend', handleDrawEnd);
+
+// 修改 mousedown 加入 touchstart
+map.on('mousedown touchstart', (e) => {
+    if (!e || !e.latlng) return;
+    if (e.originalEvent.target.closest('#side-toolbar')) return;
+
+    if (isDrawingMode && drawMethod === 'scribble') {
+        isScribbling = true;
+        
+        // 關鍵：手機繪圖時必須關閉地圖拖曳，否則畫線時頁面會跟著動
+        map.dragging.disable(); 
+        
+        lastScribbleLatLng = e.latlng;
+        tempDrawPoints = [];
+        addPointToTrack(e.latlng, false);
+    }
+});
+
+// 修改 mousemove 加入 touchmove
+map.on('mousemove touchmove', (e) => {
+    if (isDrawingMode && isScribbling) {
+        // 防止手機畫面滾動
+        if (e.originalEvent.cancelable) e.originalEvent.preventDefault();
+
+        const dist = calculateDistance(lastScribbleLatLng.lat, lastScribbleLatLng.lng, e.latlng.lat, e.latlng.lng);
+        // 手機靈敏度通常較高，可以適度增加距離閾值
+        if (dist > 0.005) { 
+            const p = {
+                lat: e.latlng.lat, lon: e.latlng.lng,
+                ele: 0, timeLocal: formatDate(new Date()), distance: 0 
+            };
+            
+            // ... (繪製中的點位紀錄邏輯) ...
+            let stackIdx = window.currentMultiIndex || 0;
+            const targetTrack = multiGpxStack[stackIdx];
+            targetTrack.points.push(p);
+            if (polyline) polyline.addLatLng(e.latlng);
+            tempDrawPoints.push(p);
+            lastScribbleLatLng = e.latlng;
+        }
     }
 });
